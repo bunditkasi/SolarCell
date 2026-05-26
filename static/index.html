@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Solar Operations</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">SO</span>
+        <div>
+          <strong>Solar Operations</strong>
+          <span>MR.DIY energy monitoring</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="active">Dashboard</a>
+        <a>Sites</a>
+        <a>Reports</a>
+        <a>Alerts</a>
+        <a>Settings</a>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="title-row">
+        <div>
+          <h1>Solar Operations</h1>
+          <p>Unified Huawei and Atmoce site monitoring.</p>
+        </div>
+        <div class="actions">
+          <button id="refreshButton" type="button">Refresh</button>
+          <a class="button secondary" href="/api/export.csv">Export CSV</a>
+        </div>
+      </section>
+
+      <section class="kpis" id="kpis"></section>
+
+      <section class="health" id="sourceHealth"></section>
+
+      <section class="toolbar">
+        <input id="queryInput" type="search" placeholder="Site name or ID" />
+        <select id="sourceFilter">
+          <option value="all">All sources</option>
+          <option value="huawei">Huawei</option>
+          <option value="atmoce">Atmoce</option>
+        </select>
+        <select id="statusFilter">
+          <option value="all">All status</option>
+          <option value="normal">Normal</option>
+          <option value="faulty">Faulty</option>
+          <option value="offline">Offline</option>
+          <option value="unknown">Unknown</option>
+        </select>
+        <input id="countryFilter" type="search" placeholder="Country/Region" />
+      </section>
+
+      <section class="table-shell">
+        <div class="table-header">
+          <h2>Sites</h2>
+          <span id="rowCount">0 sites</span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Status</th>
+                <th>Site Name</th>
+                <th>Install/Grid Date</th>
+                <th>Capacity kWp</th>
+                <th>Battery kWh</th>
+                <th>Current kW</th>
+                <th>Today kWh</th>
+                <th>Month kWh</th>
+                <th>Lifetime kWh</th>
+                <th>Last Sync</th>
+              </tr>
+            </thead>
+            <tbody id="siteRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="empty" id="emptyState" hidden>No site data loaded. Press Refresh to fetch the latest data.</section>
+      <section class="errors" id="errors" hidden></section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
