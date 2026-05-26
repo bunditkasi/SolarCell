@@ -45,7 +45,14 @@ Open:
 http://127.0.0.1:8000
 ```
 
-Press `Refresh` to fetch live Huawei and Atmoce data.
+The dashboard uses cached data. While the server is running, it automatically refreshes four times per day in Thailand time:
+
+- `08:00`
+- `12:00`
+- `16:00`
+- `20:00`
+
+Press `Refresh` only when you want to update the cache manually.
 
 The combined output includes:
 

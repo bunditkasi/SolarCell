@@ -2,6 +2,9 @@ const state = {
   sites: [],
   summary: null,
   errors: [],
+  lastRefreshAt: null,
+  nextRefreshAt: null,
+  refreshSchedule: [],
 };
 
 const elements = {
@@ -12,6 +15,7 @@ const elements = {
   empty: document.querySelector("#emptyState"),
   errors: document.querySelector("#errors"),
   refresh: document.querySelector("#refreshButton"),
+  cacheMeta: document.querySelector("#cacheMeta"),
   query: document.querySelector("#queryInput"),
   source: document.querySelector("#sourceFilter"),
   status: document.querySelector("#statusFilter"),
@@ -21,6 +25,14 @@ const elements = {
 function number(value, digits = 2) {
   if (value === null || value === undefined || value === "") return "--";
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
+function formatDateTime(value) {
+  if (!value) return "Not yet refreshed";
+  return new Date(value).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function statusBucket(status) {
@@ -94,11 +106,17 @@ function renderErrors(errors) {
   elements.errors.textContent = errors.join("\n");
 }
 
+function renderCacheMeta() {
+  const schedule = state.refreshSchedule.length ? state.refreshSchedule.join(", ") : "08:00, 12:00, 16:00, 20:00";
+  elements.cacheMeta.textContent = `Cached data. Last update: ${formatDateTime(state.lastRefreshAt)}. Next scheduled refresh: ${formatDateTime(state.nextRefreshAt)}. Daily rounds: ${schedule}.`;
+}
+
 function render() {
   renderKpis(state.summary);
   renderHealth(state.summary);
   renderTable();
   renderErrors(state.errors);
+  renderCacheMeta();
 }
 
 async function loadData(refresh = false) {
@@ -115,6 +133,9 @@ async function loadData(refresh = false) {
     source_health: {},
   };
   state.errors = data.errors || [];
+  state.lastRefreshAt = data.last_refresh_at || null;
+  state.nextRefreshAt = data.next_refresh_at || null;
+  state.refreshSchedule = data.refresh_schedule || [];
   render();
   elements.refresh.disabled = false;
 }

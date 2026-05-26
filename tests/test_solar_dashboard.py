@@ -1,8 +1,16 @@
 import csv
+from datetime import datetime, timezone
 import io
 import unittest
 
-from solar_dashboard import current_cache, filter_sites, refresh_cache, sites_to_csv, summarize_sites
+from solar_dashboard import (
+    current_cache,
+    filter_sites,
+    next_refresh_time,
+    refresh_cache,
+    sites_to_csv,
+    summarize_sites,
+)
 
 
 SITES = [
@@ -63,12 +71,22 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(rows[1]["site_name"], "PCKN Mr. DIY")
 
     def test_refresh_cache_updates_shared_export_source(self):
-        cache = refresh_cache(lambda: SITES)
+        cache = refresh_cache(lambda: SITES, now_provider=lambda: datetime(2026, 5, 26, 4, 30, tzinfo=timezone.utc))
         rows = list(csv.DictReader(io.StringIO(sites_to_csv(current_cache()["sites"]))))
 
         self.assertIs(cache, current_cache())
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[1]["site_id"], "H1")
+        self.assertEqual(cache["last_refresh_at"], "2026-05-26T04:30:00+00:00")
+        self.assertEqual(cache["next_refresh_at"], "2026-05-26T12:00:00+07:00")
+        self.assertEqual(cache["refresh_schedule"], ["08:00", "12:00", "16:00", "20:00"])
+
+    def test_next_refresh_time_uses_four_daily_bangkok_slots(self):
+        morning = datetime(2026, 5, 26, 7, 59, tzinfo=timezone.utc)
+        evening = datetime(2026, 5, 26, 14, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(next_refresh_time(morning).isoformat(), "2026-05-26T16:00:00+07:00")
+        self.assertEqual(next_refresh_time(evening).isoformat(), "2026-05-27T08:00:00+07:00")
 
 
 if __name__ == "__main__":
