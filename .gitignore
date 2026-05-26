@@ -1,0 +1,6 @@
+.env
+node_modules/
+package-lock.json
+output/
+__pycache__/
+tests/__pycache__/
