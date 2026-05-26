@@ -20,6 +20,7 @@ body {
   font-family: Arial, "Segoe UI", sans-serif;
   color: var(--text);
   background: var(--bg);
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -59,6 +60,7 @@ body {
 .nav {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .nav a {
@@ -250,5 +252,22 @@ th {
   .kpis,
   .health {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
+  }
+
+  .nav {
+    width: 100%;
+  }
+
+  .nav a {
+    padding: 8px 10px;
+  }
+
+  .page {
+    padding: 22px 16px;
+  }
+
+  .toolbar input,
+  .toolbar select {
+    width: 100%;
   }
 }

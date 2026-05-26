@@ -82,15 +82,30 @@ def sites_to_csv(sites):
     return handle.getvalue()
 
 
-class DashboardHandler(BaseHTTPRequestHandler):
-    cache = {"sites": [], "summary": summarize_sites([]), "errors": []}
+DASHBOARD_CACHE = {"sites": [], "summary": summarize_sites([]), "errors": []}
 
+
+def current_cache():
+    return DASHBOARD_CACHE
+
+
+def refresh_cache(fetcher=fetch_all):
+    global DASHBOARD_CACHE
+    try:
+        sites = fetcher()
+        DASHBOARD_CACHE = {"sites": sites, "summary": summarize_sites(sites), "errors": []}
+    except Exception as exc:
+        DASHBOARD_CACHE = {"sites": [], "summary": summarize_sites([]), "errors": [str(exc)]}
+    return DASHBOARD_CACHE
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/sites":
-            return self._json(self.cache)
+            return self._json(current_cache())
         if parsed.path == "/api/export.csv":
-            return self._send(200, sites_to_csv(self.cache["sites"]), "text/csv; charset=utf-8")
+            return self._send(200, sites_to_csv(current_cache()["sites"]), "text/csv; charset=utf-8")
         if parsed.path in {"/", "/index.html"}:
             return self._static("index.html", "text/html; charset=utf-8")
         if parsed.path.startswith("/static/"):
@@ -102,12 +117,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlparse(self.path).path != "/api/refresh":
             return self._send(404, "Not found", "text/plain; charset=utf-8")
-        try:
-            sites = fetch_all()
-            self.cache = {"sites": sites, "summary": summarize_sites(sites), "errors": []}
-        except Exception as exc:
-            self.cache = {"sites": [], "summary": summarize_sites([]), "errors": [str(exc)]}
-        self._json(self.cache)
+        self._json(refresh_cache())
 
     def _static(self, filename, content_type):
         path = STATIC_DIR / filename

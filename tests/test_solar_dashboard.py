@@ -2,7 +2,7 @@ import csv
 import io
 import unittest
 
-from solar_dashboard import filter_sites, sites_to_csv, summarize_sites
+from solar_dashboard import current_cache, filter_sites, refresh_cache, sites_to_csv, summarize_sites
 
 
 SITES = [
@@ -61,6 +61,14 @@ class DashboardAggregationTest(unittest.TestCase):
 
         self.assertEqual(rows[0]["source"], "atmoce")
         self.assertEqual(rows[1]["site_name"], "PCKN Mr. DIY")
+
+    def test_refresh_cache_updates_shared_export_source(self):
+        cache = refresh_cache(lambda: SITES)
+        rows = list(csv.DictReader(io.StringIO(sites_to_csv(current_cache()["sites"]))))
+
+        self.assertIs(cache, current_cache())
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]["site_id"], "H1")
 
 
 if __name__ == "__main__":
