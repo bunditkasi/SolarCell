@@ -68,7 +68,7 @@ function renderKpis(summary) {
 }
 
 function renderHealth(summary) {
-  const sources = ["huawei", "atmoce", "huawei_web"];
+  const sources = ["huawei", "atmoce"];
   elements.sourceHealth.innerHTML = sources
     .map((source) => {
       const status = summary.source_health[source] || "unknown";
