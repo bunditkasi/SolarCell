@@ -5,6 +5,7 @@ import unittest
 
 from solar_dashboard import (
     current_cache,
+    cache_needs_refresh,
     filter_sites,
     next_refresh_time,
     refresh_cache,
@@ -87,6 +88,15 @@ class DashboardAggregationTest(unittest.TestCase):
 
         self.assertEqual(next_refresh_time(morning).isoformat(), "2026-05-26T16:00:00+07:00")
         self.assertEqual(next_refresh_time(evening).isoformat(), "2026-05-27T08:00:00+07:00")
+
+    def test_cache_needs_refresh_after_next_slot(self):
+        cache = refresh_cache(lambda: SITES, now_provider=lambda: datetime(2026, 5, 26, 4, 30, tzinfo=timezone.utc))
+
+        before_slot = datetime(2026, 5, 26, 4, 59, tzinfo=timezone.utc)
+        after_slot = datetime(2026, 5, 26, 5, 0, tzinfo=timezone.utc)
+
+        self.assertFalse(cache_needs_refresh(cache, before_slot))
+        self.assertTrue(cache_needs_refresh(cache, after_slot))
 
 
 if __name__ == "__main__":

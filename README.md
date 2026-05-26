@@ -54,6 +54,8 @@ The dashboard uses cached data. While the server is running, it automatically re
 
 Press `Refresh` only when you want to update the cache manually.
 
+On Vercel Hobby, cron jobs are limited to once per day. The deployed version therefore uses lazy scheduled refresh: the first request after one of the scheduled rounds refreshes the cache for that round. Manual refresh remains available from the dashboard.
+
 The combined output includes:
 
 - `source`

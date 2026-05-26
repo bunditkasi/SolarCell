@@ -121,6 +121,16 @@ def current_cache():
     return DASHBOARD_CACHE
 
 
+def cache_needs_refresh(cache=None, now=None):
+    cache = cache or DASHBOARD_CACHE
+    if not cache["sites"]:
+        return True
+    next_refresh_at = cache.get("next_refresh_at")
+    if not next_refresh_at:
+        return True
+    return (now or _now_utc()).astimezone(BANGKOK_TZ) >= datetime.fromisoformat(next_refresh_at)
+
+
 def refresh_cache(fetcher=fetch_all, now_provider=_now_utc):
     global DASHBOARD_CACHE
     now = now_provider()
