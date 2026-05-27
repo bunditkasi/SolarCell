@@ -9,6 +9,8 @@ Set credentials as environment variables. Do not commit real credentials.
 PowerShell example:
 
 ```powershell
+$env:ATMOCE_APP_KEY="your-atmoce-openapi-app-key"
+$env:ATMOCE_APP_SECRET="your-atmoce-openapi-app-secret"
 $env:ATMOCE_USERNAME="your-atmoce-username"
 $env:ATMOCE_PASSWORD="your-atmoce-password"
 $env:HUAWEI_USERNAME="your-huawei-northbound-username"
@@ -27,6 +29,8 @@ python solar_fetch.py --format csv --output output\solar-sites.csv
 Set credentials in PowerShell:
 
 ```powershell
+$env:ATMOCE_APP_KEY="your-atmoce-openapi-app-key"
+$env:ATMOCE_APP_SECRET="your-atmoce-openapi-app-secret"
 $env:ATMOCE_USERNAME="your-atmoce-username"
 $env:ATMOCE_PASSWORD="your-atmoce-password"
 $env:HUAWEI_USERNAME="your-huawei-northbound-username"
@@ -71,6 +75,6 @@ The combined output includes:
 
 ## Notes
 
-Atmoce is fetched through the same portal API used by the web app because the public OpenAPI token endpoint rejected `grant_type=system` for the provided key.
+Atmoce uses the official OpenAPI flow when `ATMOCE_APP_KEY` and `ATMOCE_APP_SECRET` are configured. The older portal API remains available as a fallback when those variables are not set.
 
 Huawei real-time KPI can return `failCode=407` if called too frequently. In that case the connector still returns the Huawei station list, with KPI values left blank for that run.

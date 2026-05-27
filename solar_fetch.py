@@ -46,6 +46,22 @@ def _utc_now_iso():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _ms_to_utc_iso(value):
+    millis = _float_or_none(value)
+    if millis is None:
+        return _utc_now_iso()
+    return datetime.fromtimestamp(millis / 1000, timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _ddmmyyyy_to_iso(value):
+    if not value:
+        return ""
+    try:
+        return datetime.strptime(value, "%d/%m/%Y").date().isoformat()
+    except ValueError:
+        return value
+
+
 def _json_request(opener, method, url, payload=None, headers=None, timeout=30):
     body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request_headers = {
@@ -71,6 +87,11 @@ def _unwrap_atmoce_data(response):
     return data
 
 
+def _chunks(values, size):
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
+
+
 def normalize_atmoce_station(row):
     return {
         "source": "atmoce",
@@ -86,6 +107,28 @@ def normalize_atmoce_station(row):
         "month_energy_kwh": _round_or_none(row.get("monthGeneration")),
         "lifetime_energy_kwh": _round_or_none(row.get("totalGeneration")),
         "last_sync": _utc_now_iso(),
+        "collector_status": "ok",
+    }
+
+
+def normalize_atmoce_openapi_site(site, last_power=None, energy=None):
+    last_power = last_power or {}
+    energy = energy or {}
+    status_map = {0: "Offline", 1: "Normal", 2: "Fault"}
+    return {
+        "source": "atmoce",
+        "site_id": str(site.get("siteId") or ""),
+        "site_name": site.get("name") or "",
+        "status": status_map.get(last_power.get("status"), str(last_power.get("status") or "")),
+        "country": site.get("countryISO") or site.get("countryGEC") or site.get("countrySTANAG") or "",
+        "installed_date": _ddmmyyyy_to_iso(site.get("gridTiedTime")),
+        "capacity_kw": _round_or_none(site.get("solarCapacity")),
+        "battery_capacity_kwh": _round_or_none(site.get("batteryCapacity")),
+        "current_power_kw": _round_or_none((_float_or_none(last_power.get("solarGenerationPower")) or 0) / 1000),
+        "today_energy_kwh": _round_or_none(last_power.get("dailySolarGeneration") or energy.get("solarGeneration")),
+        "month_energy_kwh": _round_or_none(last_power.get("monthlySolarGeneration")),
+        "lifetime_energy_kwh": _round_or_none(last_power.get("lifetimeSolarGeneration")),
+        "last_sync": _ms_to_utc_iso(last_power.get("lastReportedTime")),
         "collector_status": "ok",
     }
 
@@ -175,6 +218,79 @@ class AtmoceClient:
         return [normalize_atmoce_station(row) for row in (rows or [])]
 
 
+class AtmoceOpenApiClient:
+    def __init__(self, base_url, app_key, app_secret):
+        self.base_url = base_url.rstrip("/")
+        self.app_key = app_key
+        self.app_secret = app_secret
+        self.opener = urllib.request.build_opener()
+        self.access_token = None
+
+    def login(self):
+        response, _ = _json_request(
+            self.opener,
+            "POST",
+            f"{self.base_url}/openapi/v1/auth/token",
+            {
+                "grant_type": "system",
+                "app_key": self.app_key,
+                "app_secret": self.app_secret,
+            },
+        )
+        if not response.get("success"):
+            raise RuntimeError(f"Atmoce OpenAPI login failed: {response}")
+        data = response.get("data") or {}
+        self.access_token = data["access_token"]
+
+    def get(self, path, params=None):
+        if not self.access_token:
+            self.login()
+        url = f"{self.base_url}{path}"
+        if params:
+            url = f"{url}?{urllib.parse.urlencode(params)}"
+        response, _ = _json_request(
+            self.opener,
+            "GET",
+            url,
+            headers={"Authorization": f"Bearer {self.access_token}"},
+        )
+        if not response.get("success"):
+            raise RuntimeError(f"Atmoce OpenAPI request failed for {path}: {response}")
+        return response
+
+    def fetch_sites(self):
+        sites = []
+        page = 1
+        while True:
+            response = self.get("/openapi/v1/sites/getSites", {"page": page})
+            sites.extend(response.get("data") or [])
+            if response.get("pageEnd") == 1:
+                return sites
+            page += 1
+
+    def fetch_stations(self):
+        sites = self.fetch_sites()
+        site_ids = [site.get("siteId") for site in sites if site.get("siteId")]
+        latest_by_id = {}
+        energy_by_id = {}
+        for chunk in _chunks(site_ids, 100):
+            joined = ",".join(chunk)
+            latest = self.get("/openapi/v1/sites/getSitesLastPower", {"siteIds": joined})
+            for row in latest.get("data") or []:
+                latest_by_id[row.get("siteId")] = row
+            energy = self.get("/openapi/v1/sites/getSitesEnergy", {"siteIds": joined})
+            for row in energy.get("data") or []:
+                energy_by_id[row.get("siteId")] = row
+        return [
+            normalize_atmoce_openapi_site(
+                site,
+                latest_by_id.get(site.get("siteId")),
+                energy_by_id.get(site.get("siteId")),
+            )
+            for site in sites
+        ]
+
+
 class HuaweiClient:
     def __init__(self, base_url, username, system_code):
         self.base_url = base_url.rstrip("/")
@@ -237,11 +353,19 @@ class HuaweiClient:
 
 
 def fetch_all():
-    atmoce = AtmoceClient(
-        os.environ.get("ATMOCE_BASE_URL", "https://www.atmocecloud.com"),
-        _required_env("ATMOCE_USERNAME"),
-        _required_env("ATMOCE_PASSWORD"),
-    )
+    atmoce_base_url = os.environ.get("ATMOCE_BASE_URL", "https://www.atmocecloud.com")
+    if os.environ.get("ATMOCE_APP_KEY") and os.environ.get("ATMOCE_APP_SECRET"):
+        atmoce = AtmoceOpenApiClient(
+            atmoce_base_url,
+            _required_env("ATMOCE_APP_KEY"),
+            _required_env("ATMOCE_APP_SECRET"),
+        )
+    else:
+        atmoce = AtmoceClient(
+            atmoce_base_url,
+            _required_env("ATMOCE_USERNAME"),
+            _required_env("ATMOCE_PASSWORD"),
+        )
     huawei = HuaweiClient(
         os.environ.get("HUAWEI_BASE_URL", "https://kr5.fusionsolar.huawei.com"),
         _required_env("HUAWEI_USERNAME"),

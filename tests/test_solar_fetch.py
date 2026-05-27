@@ -1,6 +1,6 @@
 import unittest
 
-from solar_fetch import HuaweiClient, normalize_atmoce_station, normalize_huawei_station
+from solar_fetch import HuaweiClient, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -30,6 +30,42 @@ class NormalizeSolarDataTest(unittest.TestCase):
         self.assertEqual(normalized["today_energy_kwh"], 166.69)
         self.assertEqual(normalized["lifetime_energy_kwh"], 644.25)
         self.assertRegex(normalized["last_sync"], r"^\d{4}-\d{2}-\d{2}T")
+        self.assertEqual(normalized["collector_status"], "ok")
+
+    def test_normalize_atmoce_openapi_site_uses_official_fields(self):
+        site = {
+            "siteId": "764260751203",
+            "name": "PRMB",
+            "countryISO": "TH",
+            "gridTiedTime": "27/01/2026",
+            "solarCapacity": 37.18,
+            "batteryCapacity": 14,
+        }
+        last_power = {
+            "siteId": "764260751203",
+            "lastReportedTime": 1779849000000,
+            "status": 1,
+            "solarGenerationPower": 15227,
+            "dailySolarGeneration": 28.53,
+            "monthlySolarGeneration": 4174.25,
+            "lifetimeSolarGeneration": 19733.02,
+        }
+
+        normalized = normalize_atmoce_openapi_site(site, last_power)
+
+        self.assertEqual(normalized["source"], "atmoce")
+        self.assertEqual(normalized["site_id"], "764260751203")
+        self.assertEqual(normalized["site_name"], "PRMB")
+        self.assertEqual(normalized["status"], "Normal")
+        self.assertEqual(normalized["country"], "TH")
+        self.assertEqual(normalized["installed_date"], "2026-01-27")
+        self.assertEqual(normalized["capacity_kw"], 37.18)
+        self.assertEqual(normalized["battery_capacity_kwh"], 14.0)
+        self.assertEqual(normalized["current_power_kw"], 15.227)
+        self.assertEqual(normalized["today_energy_kwh"], 28.53)
+        self.assertEqual(normalized["month_energy_kwh"], 4174.25)
+        self.assertEqual(normalized["lifetime_energy_kwh"], 19733.02)
+        self.assertEqual(normalized["last_sync"], "2026-05-27T02:30:00+00:00")
         self.assertEqual(normalized["collector_status"], "ok")
 
     def test_normalize_huawei_station_merges_kpi_data(self):
