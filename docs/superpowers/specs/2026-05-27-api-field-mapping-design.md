@@ -415,6 +415,6 @@ No write/control APIs are in scope for this mapping work.
 
 ## Open Decisions
 
-1. Should Group 1 map Huawei `real_health_state=1` as `Unknown`, `Offline`, or another label? Existing app treats `health_state_3` as normal, but `health_state_1` appears in live data.
+1. Huawei status mapping is approved as `health_state_3 = Normal`, `health_state_1 = Offline`, and `health_state_2 = Fault`.
 2. Should `current_power_kw` be blank for Huawei until device KPI is added, or should another Huawei plant field be used if available?
 3. Should Energy Flow and Battery fields be visible on the main dashboard table or only on the Reports page?

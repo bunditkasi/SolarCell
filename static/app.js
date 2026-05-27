@@ -47,9 +47,12 @@ function formatDateTime(value) {
 
 function statusBucket(status) {
   const text = String(status || "").toLowerCase();
+  if (text === "health_state_3") return "normal";
+  if (text === "health_state_1") return "offline";
+  if (text === "health_state_2") return "faulty";
   if (text.includes("fault") || text.includes("alarm") || text === "2") return "faulty";
   if (text.includes("offline") || text.includes("disconnect") || text === "0") return "offline";
-  if (text.includes("normal") || text.includes("health_state_3") || text === "1") return "normal";
+  if (text.includes("normal") || text === "1") return "normal";
   return "unknown";
 }
 

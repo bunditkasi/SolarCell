@@ -24,11 +24,17 @@ def _num(value):
 
 def _status_bucket(status):
     text = str(status or "").lower()
+    if text == "health_state_3":
+        return "normal"
+    if text == "health_state_1":
+        return "offline"
+    if text == "health_state_2":
+        return "faulty"
     if "fault" in text or "alarm" in text or text in {"2"}:
         return "faulty"
     if "offline" in text or "disconnect" in text or text in {"0"}:
         return "offline"
-    if "normal" in text or "health_state_3" in text or text in {"1"}:
+    if "normal" in text or text in {"1"}:
         return "normal"
     return "unknown"
 

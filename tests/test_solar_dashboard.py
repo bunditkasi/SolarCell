@@ -78,6 +78,19 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["site_id"], "H1")
 
+    def test_huawei_health_state_mapping(self):
+        sites = [
+            {"source": "huawei", "status": "health_state_3"},
+            {"source": "huawei", "status": "health_state_1"},
+            {"source": "huawei", "status": "health_state_2"},
+        ]
+
+        summary = summarize_sites(sites)
+
+        self.assertEqual(summary["status_counts"]["normal"], 1)
+        self.assertEqual(summary["status_counts"]["offline"], 1)
+        self.assertEqual(summary["status_counts"]["faulty"], 1)
+
     def test_sites_to_csv_contains_common_columns(self):
         text = sites_to_csv(SITES)
         rows = list(csv.DictReader(io.StringIO(text)))
