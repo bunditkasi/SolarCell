@@ -1,0 +1,82 @@
+{
+  "source": "huawei01",
+  "collection_method": "Huawei FusionSolar web list snapshot",
+  "collected_at": "2026-05-27T10:06:40+00:00",
+  "sites": [
+    {
+      "site_id": "NE=54969718",
+      "site_name": "12  PBSC  Mr.DIY Baan sanfun.",
+      "status": "health_state_3",
+      "country": "Thailand",
+      "installed_date": "2024-12-18",
+      "capacity_kw": 44.0,
+      "current_power_kw": 10.53,
+      "specific_energy_kwh_per_kwp": 5.14,
+      "today_energy_kwh": 226.33,
+      "lifetime_energy_kwh": 89295.96,
+      "battery_capacity_kwh": 0.0,
+      "last_sync": "2026-05-27T10:06:40+00:00",
+      "collector_status": "ok"
+    },
+    {
+      "site_id": "NE=52177561",
+      "site_name": "PLNT  DIY Loengnoktha",
+      "status": "health_state_3",
+      "country": "Thailand",
+      "installed_date": "2024-06-03",
+      "capacity_kw": 19.8,
+      "current_power_kw": 2.72,
+      "specific_energy_kwh_per_kwp": 4.1,
+      "today_energy_kwh": 81.14,
+      "lifetime_energy_kwh": 46258.33,
+      "battery_capacity_kwh": 0.0,
+      "last_sync": "2026-05-27T10:06:40+00:00",
+      "collector_status": "ok"
+    },
+    {
+      "site_id": "NE=51972386",
+      "site_name": "PLKB  MR.DIY Koobon 27",
+      "status": "health_state_3",
+      "country": "Thailand",
+      "installed_date": "2024-05-11",
+      "capacity_kw": 35.2,
+      "current_power_kw": 1.92,
+      "specific_energy_kwh_per_kwp": 1.24,
+      "today_energy_kwh": 43.67,
+      "lifetime_energy_kwh": 66290.77,
+      "battery_capacity_kwh": 0.0,
+      "last_sync": "2026-05-27T10:06:40+00:00",
+      "collector_status": "ok"
+    },
+    {
+      "site_id": "NE=51027412",
+      "site_name": "MR.DIY DC",
+      "status": "health_state_2",
+      "country": "Thailand",
+      "installed_date": "2023-09-18",
+      "capacity_kw": 194.78,
+      "current_power_kw": 18.93,
+      "specific_energy_kwh_per_kwp": 2.67,
+      "today_energy_kwh": 519.8,
+      "lifetime_energy_kwh": 602290.14,
+      "battery_capacity_kwh": 0.0,
+      "last_sync": "2026-05-27T10:06:40+00:00",
+      "collector_status": "ok"
+    },
+    {
+      "site_id": "NE=50806243",
+      "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+      "status": "health_state_3",
+      "country": "Thailand",
+      "installed_date": "2023-06-29",
+      "capacity_kw": 55.68,
+      "current_power_kw": 11.84,
+      "specific_energy_kwh_per_kwp": 4.79,
+      "today_energy_kwh": 266.92,
+      "lifetime_energy_kwh": 206189.22,
+      "battery_capacity_kwh": 0.0,
+      "last_sync": "2026-05-27T10:06:40+00:00",
+      "collector_status": "ok"
+    }
+  ]
+}

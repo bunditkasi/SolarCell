@@ -1,6 +1,8 @@
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 
-from solar_fetch import HuaweiClient, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station
+from solar_fetch import HuaweiClient, _fetch_source, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -116,13 +118,47 @@ class NormalizeSolarDataTest(unittest.TestCase):
                     raise RuntimeError("Huawei request failed: {'failCode': 407, 'data': 'ACCESS_FREQUENCY_IS_TOO_HIGH'}")
                 raise AssertionError(path)
 
-        rows = FakeHuaweiClient().fetch_stations()
+        with redirect_stderr(StringIO()):
+            rows = FakeHuaweiClient().fetch_stations()
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["site_id"], "NE=1")
         self.assertEqual(rows[0]["capacity_kw"], 31.2)
         self.assertIsNone(rows[0]["today_energy_kwh"])
         self.assertEqual(rows[0]["collector_status"], "degraded")
+
+    def test_normalize_huawei_web_station_uses_huawei01_source(self):
+        normalized = normalize_huawei_web_station(
+            {
+                "station_dn": "NE=51027412",
+                "site_name": "MR.DIY DC",
+                "status": "health_state_2",
+                "country": "Thailand",
+                "grid_connection_date": "2023-09-18",
+                "capacity_kw": "194.780",
+                "current_power_kw": "18.93",
+                "today_energy_kwh": "519.80",
+                "lifetime_energy_kwh": "602,290.14",
+            }
+        )
+
+        self.assertEqual(normalized["source"], "huawei01")
+        self.assertEqual(normalized["site_id"], "NE=51027412")
+        self.assertEqual(normalized["status"], "health_state_2")
+        self.assertEqual(normalized["capacity_kw"], 194.78)
+        self.assertEqual(normalized["today_energy_kwh"], 519.8)
+        self.assertEqual(normalized["lifetime_energy_kwh"], 602290.14)
+
+    def test_load_huawei01_snapshot_returns_empty_when_default_file_missing(self):
+        rows = load_huawei01_snapshot("data/missing-huawei01.json")
+
+        self.assertEqual(rows, [])
+
+    def test_fetch_source_returns_empty_list_when_one_source_fails(self):
+        with redirect_stderr(StringIO()):
+            rows = _fetch_source("Demo", lambda: (_ for _ in ()).throw(RuntimeError("rate limited")))
+
+        self.assertEqual(rows, [])
 
 
 if __name__ == "__main__":

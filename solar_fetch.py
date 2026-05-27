@@ -31,6 +31,8 @@ COMMON_FIELDS = [
 def _float_or_none(value):
     if value in (None, "", "--"):
         return None
+    if isinstance(value, str):
+        value = value.replace(",", "")
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -153,6 +155,46 @@ def normalize_huawei_station(station, kpi=None, collector_status="ok"):
         "last_sync": _utc_now_iso(),
         "collector_status": collector_status,
     }
+
+
+def normalize_huawei_web_station(row):
+    return {
+        "source": "huawei01",
+        "site_id": row.get("site_id") or row.get("station_dn") or "",
+        "site_name": row.get("site_name") or "",
+        "status": row.get("status") or "",
+        "country": row.get("country") or "",
+        "installed_date": row.get("installed_date") or row.get("grid_connection_date") or "",
+        "capacity_kw": _round_or_none(row.get("capacity_kw")),
+        "battery_capacity_kwh": _round_or_none(row.get("battery_capacity_kwh")),
+        "current_power_kw": _round_or_none(row.get("current_power_kw")),
+        "today_energy_kwh": _round_or_none(row.get("today_energy_kwh")),
+        "month_energy_kwh": _round_or_none(row.get("month_energy_kwh")),
+        "lifetime_energy_kwh": _round_or_none(row.get("lifetime_energy_kwh")),
+        "last_sync": row.get("last_sync") or _utc_now_iso(),
+        "collector_status": row.get("collector_status") or "ok",
+    }
+
+
+def load_huawei01_snapshot(path=None):
+    env_path = os.environ.get("HUAWEI01_JSON_PATH")
+    path = path or env_path or os.path.join("data", "huawei01_sites.json")
+    if not os.path.exists(path):
+        if env_path and path == env_path:
+            raise RuntimeError(f"Huawei01 snapshot file not found: {path}")
+        return []
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    rows = payload.get("sites") if isinstance(payload, dict) else payload
+    return [normalize_huawei_web_station(row) for row in (rows or [])]
+
+
+def _fetch_source(label, fetcher):
+    try:
+        return fetcher()
+    except Exception as exc:
+        print(f"Warning: {label} fetch failed; skipping source for this run: {exc}", file=sys.stderr)
+        return []
 
 
 class AtmoceClient:
@@ -371,7 +413,11 @@ def fetch_all():
         _required_env("HUAWEI_USERNAME"),
         _required_env("HUAWEI_SYSTEM_CODE"),
     )
-    return atmoce.fetch_stations() + huawei.fetch_stations()
+    return (
+        _fetch_source("Atmoce", atmoce.fetch_stations)
+        + _fetch_source("Huawei", huawei.fetch_stations)
+        + _fetch_source("Huawei01", load_huawei01_snapshot)
+    )
 
 
 def _required_env(name):

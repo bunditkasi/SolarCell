@@ -99,8 +99,7 @@ function renderHealth(summary) {
   elements.sourceHealth.innerHTML = sources
     .map(([source, label]) => {
       const status = summary.source_health[source] || "unknown";
-      const displayStatus = source === "huawei01" ? "ok" : status;
-      return `<article class="card"><label>${label}</label><strong class="${displayStatus}">${displayStatus}</strong></article>`;
+      return `<article class="card"><label>${label}</label><strong class="${status}">${status}</strong></article>`;
     })
     .join("");
 }

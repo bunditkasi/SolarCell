@@ -15,6 +15,7 @@ $env:ATMOCE_USERNAME="your-atmoce-username"
 $env:ATMOCE_PASSWORD="your-atmoce-password"
 $env:HUAWEI_USERNAME="your-huawei-northbound-username"
 $env:HUAWEI_SYSTEM_CODE="your-huawei-northbound-system-code"
+$env:HUAWEI01_JSON_PATH="data/huawei01_sites.json"
 ```
 
 ## Run
@@ -35,6 +36,7 @@ $env:ATMOCE_USERNAME="your-atmoce-username"
 $env:ATMOCE_PASSWORD="your-atmoce-password"
 $env:HUAWEI_USERNAME="your-huawei-northbound-username"
 $env:HUAWEI_SYSTEM_CODE="your-huawei-northbound-system-code"
+$env:HUAWEI01_JSON_PATH="data/huawei01_sites.json"
 ```
 
 Start the local dashboard:
@@ -69,3 +71,5 @@ The combined output includes:
 Atmoce uses the official OpenAPI flow when `ATMOCE_APP_KEY` and `ATMOCE_APP_SECRET` are configured. The older portal API remains available as a fallback when those variables are not set.
 
 Huawei real-time KPI can return `failCode=407` if called too frequently. In that case the connector still returns the Huawei station list, with KPI values left blank for that run.
+
+Huawei01 currently uses a FusionSolar web snapshot because its Northbound API is not configured yet. Update `data/huawei01_sites.json` after logging in to the Huawei01 web account, or set `HUAWEI01_JSON_PATH` to another JSON snapshot path.
