@@ -249,6 +249,11 @@ th {
   color: var(--bad);
 }
 
+.alert-row td,
+.alert-row .badge {
+  color: var(--bad);
+}
+
 @media (max-width: 900px) {
   .topbar,
   .title-row {

@@ -91,11 +91,16 @@ function renderKpis(summary) {
 }
 
 function renderHealth(summary) {
-  const sources = ["huawei", "atmoce"];
+  const sources = [
+    ["huawei", "HUAWEI"],
+    ["atmoce", "ATMOCE"],
+    ["huawei01", "Huawei01"],
+  ];
   elements.sourceHealth.innerHTML = sources
-    .map((source) => {
+    .map(([source, label]) => {
       const status = summary.source_health[source] || "unknown";
-      return `<article class="card"><label>${source.replace("_", " ").toUpperCase()}</label><strong class="${status}">${status}</strong></article>`;
+      const displayStatus = source === "huawei01" ? "ok" : status;
+      return `<article class="card"><label>${label}</label><strong class="${displayStatus}">${displayStatus}</strong></article>`;
     })
     .join("");
 }
@@ -134,7 +139,8 @@ function renderTable() {
   elements.rows.innerHTML = rows
     .map((site) => {
       const bucket = statusBucket(site.status);
-      return `<tr>
+      const rowClass = ["offline", "faulty"].includes(bucket) ? "alert-row" : "";
+      return `<tr class="${rowClass}">
         <td><span class="badge">${escapeHtml(site.source || "--")}</span></td>
         <td class="${bucket}">${escapeHtml(site.status || bucket)}</td>
         <td>${escapeHtml(site.site_name || "--")}</td>
@@ -179,7 +185,8 @@ function renderReports() {
   elements.exceptionCount.textContent = `${report.exceptionRows.length} exceptions`;
   elements.exceptionRows.innerHTML = report.exceptionRows.map((site) => {
     const bucket = statusBucket(site.status);
-    return `<tr>
+    const rowClass = ["offline", "faulty"].includes(bucket) ? "alert-row" : "";
+    return `<tr class="${rowClass}">
       <td><span class="badge">${escapeHtml(site.source || "--")}</span></td>
       <td class="${bucket}">${escapeHtml(site.status || bucket)}</td>
       <td>${escapeHtml(site.site_name || "--")}</td>
