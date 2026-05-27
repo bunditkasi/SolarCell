@@ -49,16 +49,7 @@ Open:
 http://127.0.0.1:8000
 ```
 
-The dashboard uses cached data. While the server is running, it automatically refreshes four times per day in Thailand time:
-
-- `08:00`
-- `12:00`
-- `16:00`
-- `20:00`
-
-Press `Refresh` only when you want to update the cache manually.
-
-On Vercel Hobby, cron jobs are limited to once per day. The deployed version therefore uses lazy scheduled refresh: the first request after one of the scheduled rounds refreshes the cache for that round. Manual refresh remains available from the dashboard.
+The dashboard fetches fresh data when the Dashboard loads or when `Refresh` is pressed. The Reports tab reuses the data already loaded in the browser and does not trigger another vendor API call when switching tabs.
 
 The combined output includes:
 

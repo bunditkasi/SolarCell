@@ -1,9 +1,7 @@
 import csv
 import io
 import json
-import threading
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -12,10 +10,6 @@ from solar_fetch import COMMON_FIELDS, fetch_all
 
 
 STATIC_DIR = Path(__file__).parent / "static"
-BANGKOK_TZ = timezone(timedelta(hours=7))
-REFRESH_HOURS = (8, 12, 16, 20)
-REFRESH_SCHEDULE = [f"{hour:02d}:00" for hour in REFRESH_HOURS]
-SCHEDULER_STARTED = False
 
 
 def _num(value):
@@ -129,24 +123,14 @@ def _now_utc():
     return datetime.now(timezone.utc)
 
 
-def next_refresh_time(now=None):
-    current = (now or _now_utc()).astimezone(BANGKOK_TZ)
-    for hour in REFRESH_HOURS:
-        candidate = current.replace(hour=hour, minute=0, second=0, microsecond=0)
-        if candidate > current:
-            return candidate
-    tomorrow = current + timedelta(days=1)
-    return tomorrow.replace(hour=REFRESH_HOURS[0], minute=0, second=0, microsecond=0)
-
-
-def _empty_cache(now=None):
+def _empty_cache():
     return {
         "sites": [],
         "summary": summarize_sites([]),
         "errors": [],
         "last_refresh_at": None,
-        "next_refresh_at": next_refresh_time(now).isoformat(),
-        "refresh_schedule": REFRESH_SCHEDULE,
+        "next_refresh_at": None,
+        "refresh_schedule": [],
     }
 
 
@@ -155,16 +139,6 @@ DASHBOARD_CACHE = _empty_cache()
 
 def current_cache():
     return DASHBOARD_CACHE
-
-
-def cache_needs_refresh(cache=None, now=None):
-    cache = cache or DASHBOARD_CACHE
-    if not cache["sites"]:
-        return True
-    next_refresh_at = cache.get("next_refresh_at")
-    if not next_refresh_at:
-        return True
-    return (now or _now_utc()).astimezone(BANGKOK_TZ) >= datetime.fromisoformat(next_refresh_at)
 
 
 def refresh_cache(fetcher=fetch_all, now_provider=_now_utc):
@@ -177,46 +151,26 @@ def refresh_cache(fetcher=fetch_all, now_provider=_now_utc):
             "summary": summarize_sites(sites),
             "errors": [],
             "last_refresh_at": now.isoformat(),
-            "next_refresh_at": next_refresh_time(now).isoformat(),
-            "refresh_schedule": REFRESH_SCHEDULE,
+            "next_refresh_at": None,
+            "refresh_schedule": [],
         }
     except Exception as exc:
         DASHBOARD_CACHE = {
             **DASHBOARD_CACHE,
             "errors": [str(exc)],
-            "next_refresh_at": next_refresh_time(now).isoformat(),
-            "refresh_schedule": REFRESH_SCHEDULE,
+            "next_refresh_at": None,
+            "refresh_schedule": [],
         }
     return DASHBOARD_CACHE
-
-
-def start_refresh_scheduler(fetcher=fetch_all, poll_seconds=60):
-    global SCHEDULER_STARTED
-    if SCHEDULER_STARTED:
-        return
-    SCHEDULER_STARTED = True
-
-    def run():
-        last_slot = None
-        while True:
-            now = _now_utc().astimezone(BANGKOK_TZ)
-            slot = now.strftime("%Y-%m-%d %H:%M")
-            if now.minute == 0 and now.hour in REFRESH_HOURS and slot != last_slot:
-                refresh_cache(fetcher=fetcher)
-                last_slot = slot
-            time.sleep(poll_seconds)
-
-    thread = threading.Thread(target=run, name="solar-refresh-scheduler", daemon=True)
-    thread.start()
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/api/sites":
-            return self._json(current_cache())
+            return self._json(refresh_cache())
         if parsed.path == "/api/export.csv":
-            return self._send(200, sites_to_csv(current_cache()["sites"]), "text/csv; charset=utf-8")
+            return self._send(200, sites_to_csv(refresh_cache()["sites"]), "text/csv; charset=utf-8")
         if parsed.path in {"/", "/index.html"}:
             return self._static("index.html", "text/html; charset=utf-8")
         if parsed.path.startswith("/static/"):
@@ -249,8 +203,6 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 
 def run_server(host="127.0.0.1", port=8000):
-    refresh_cache()
-    start_refresh_scheduler()
     server = ThreadingHTTPServer((host, port), DashboardHandler)
     print(f"Solar Operations dashboard running at http://{host}:{port}")
     server.serve_forever()

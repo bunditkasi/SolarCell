@@ -197,8 +197,7 @@ function renderErrors(errors) {
 }
 
 function renderCacheMeta() {
-  const schedule = state.refreshSchedule.length ? state.refreshSchedule.join(", ") : "08:00, 12:00, 16:00, 20:00";
-  elements.cacheMeta.textContent = `Cached data. Last update: ${formatDateTime(state.lastRefreshAt)}. Next scheduled refresh: ${formatDateTime(state.nextRefreshAt)}. Daily rounds: ${schedule}.`;
+  elements.cacheMeta.textContent = `Data updates when the Dashboard loads or Refresh is pressed. Last update: ${formatDateTime(state.lastRefreshAt)}.`;
 }
 
 function render() {

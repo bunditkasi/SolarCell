@@ -5,10 +5,8 @@ import unittest
 
 from solar_dashboard import (
     current_cache,
-    cache_needs_refresh,
     build_report,
     filter_sites,
-    next_refresh_time,
     refresh_cache,
     sites_to_csv,
     summarize_sites,
@@ -106,24 +104,8 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(rows[1]["site_id"], "H1")
         self.assertEqual(cache["last_refresh_at"], "2026-05-26T04:30:00+00:00")
-        self.assertEqual(cache["next_refresh_at"], "2026-05-26T12:00:00+07:00")
-        self.assertEqual(cache["refresh_schedule"], ["08:00", "12:00", "16:00", "20:00"])
-
-    def test_next_refresh_time_uses_four_daily_bangkok_slots(self):
-        morning = datetime(2026, 5, 26, 7, 59, tzinfo=timezone.utc)
-        evening = datetime(2026, 5, 26, 14, 0, tzinfo=timezone.utc)
-
-        self.assertEqual(next_refresh_time(morning).isoformat(), "2026-05-26T16:00:00+07:00")
-        self.assertEqual(next_refresh_time(evening).isoformat(), "2026-05-27T08:00:00+07:00")
-
-    def test_cache_needs_refresh_after_next_slot(self):
-        cache = refresh_cache(lambda: SITES, now_provider=lambda: datetime(2026, 5, 26, 4, 30, tzinfo=timezone.utc))
-
-        before_slot = datetime(2026, 5, 26, 4, 59, tzinfo=timezone.utc)
-        after_slot = datetime(2026, 5, 26, 5, 0, tzinfo=timezone.utc)
-
-        self.assertFalse(cache_needs_refresh(cache, before_slot))
-        self.assertTrue(cache_needs_refresh(cache, after_slot))
+        self.assertIsNone(cache["next_refresh_at"])
+        self.assertEqual(cache["refresh_schedule"], [])
 
     def test_build_report_groups_sources_and_exceptions(self):
         report = build_report(SITES)
