@@ -6,6 +6,7 @@ import unittest
 from solar_dashboard import (
     current_cache,
     cache_needs_refresh,
+    build_report,
     filter_sites,
     next_refresh_time,
     refresh_cache,
@@ -41,6 +42,19 @@ SITES = [
         "lifetime_energy_kwh": 39246.6,
         "collector_status": "degraded",
     },
+    {
+        "source": "atmoce",
+        "site_id": "A2",
+        "site_name": "Offline Branch",
+        "status": "Offline",
+        "country": "Thailand",
+        "capacity_kw": 10.0,
+        "current_power_kw": 0.0,
+        "today_energy_kwh": 0.0,
+        "month_energy_kwh": 12.5,
+        "lifetime_energy_kwh": 120.0,
+        "collector_status": "ok",
+    },
 ]
 
 
@@ -48,11 +62,11 @@ class DashboardAggregationTest(unittest.TestCase):
     def test_summarize_sites_totals_and_source_health(self):
         summary = summarize_sites(SITES)
 
-        self.assertEqual(summary["site_count"], 2)
+        self.assertEqual(summary["site_count"], 3)
         self.assertEqual(summary["status_counts"]["normal"], 2)
         self.assertEqual(summary["status_counts"]["faulty"], 0)
-        self.assertEqual(summary["status_counts"]["offline"], 0)
-        self.assertEqual(summary["total_capacity_kw"], 73.4)
+        self.assertEqual(summary["status_counts"]["offline"], 1)
+        self.assertEqual(summary["total_capacity_kw"], 83.4)
         self.assertEqual(summary["current_power_kw"], 50.0)
         self.assertEqual(summary["today_energy_kwh"], 259.0)
         self.assertEqual(summary["source_health"]["atmoce"], "ok")
@@ -76,7 +90,7 @@ class DashboardAggregationTest(unittest.TestCase):
         rows = list(csv.DictReader(io.StringIO(sites_to_csv(current_cache()["sites"]))))
 
         self.assertIs(cache, current_cache())
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 3)
         self.assertEqual(rows[1]["site_id"], "H1")
         self.assertEqual(cache["last_refresh_at"], "2026-05-26T04:30:00+00:00")
         self.assertEqual(cache["next_refresh_at"], "2026-05-26T12:00:00+07:00")
@@ -97,6 +111,18 @@ class DashboardAggregationTest(unittest.TestCase):
 
         self.assertFalse(cache_needs_refresh(cache, before_slot))
         self.assertTrue(cache_needs_refresh(cache, after_slot))
+
+    def test_build_report_groups_sources_and_exceptions(self):
+        report = build_report(SITES)
+
+        self.assertEqual(report["source_rows"][0]["source"], "atmoce")
+        self.assertEqual(report["source_rows"][0]["site_count"], 2)
+        self.assertEqual(report["source_rows"][0]["offline_count"], 1)
+        self.assertEqual(report["source_rows"][0]["today_energy_kwh"], 166.6)
+        self.assertEqual(report["source_rows"][1]["source"], "huawei")
+        self.assertEqual(report["source_rows"][1]["site_count"], 1)
+        self.assertEqual(len(report["exception_rows"]), 1)
+        self.assertEqual(report["exception_rows"][0]["site_name"], "Offline Branch")
 
 
 if __name__ == "__main__":

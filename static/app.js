@@ -5,6 +5,7 @@ const state = {
   lastRefreshAt: null,
   nextRefreshAt: null,
   refreshSchedule: [],
+  view: "dashboard",
 };
 
 const elements = {
@@ -16,6 +17,15 @@ const elements = {
   errors: document.querySelector("#errors"),
   refresh: document.querySelector("#refreshButton"),
   cacheMeta: document.querySelector("#cacheMeta"),
+  viewSections: document.querySelectorAll("[data-view]"),
+  viewLinks: document.querySelectorAll("[data-view-link]"),
+  reportKpis: document.querySelector("#reportKpis"),
+  reportSummaryRows: document.querySelector("#reportSummaryRows"),
+  reportSummaryCount: document.querySelector("#reportSummaryCount"),
+  exceptionRows: document.querySelector("#exceptionRows"),
+  exceptionCount: document.querySelector("#exceptionCount"),
+  exportSummary: document.querySelector("#exportSummaryButton"),
+  exportExceptions: document.querySelector("#exportExceptionsButton"),
   query: document.querySelector("#queryInput"),
   source: document.querySelector("#sourceFilter"),
   status: document.querySelector("#statusFilter"),
@@ -41,6 +51,16 @@ function statusBucket(status) {
   if (text.includes("offline") || text.includes("disconnect") || text === "0") return "offline";
   if (text.includes("normal") || text.includes("health_state_3") || text === "1") return "normal";
   return "unknown";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[char]);
 }
 
 function filteredSites() {
@@ -77,6 +97,33 @@ function renderHealth(summary) {
     .join("");
 }
 
+function buildReport() {
+  const sourceRows = [...new Set(state.sites.map((site) => site.source || "unknown"))]
+    .sort()
+    .map((source) => {
+      const sites = state.sites.filter((site) => (site.source || "unknown") === source);
+      const counts = { normal: 0, faulty: 0, offline: 0, unknown: 0 };
+      for (const site of sites) counts[statusBucket(site.status)] += 1;
+      return {
+        source,
+        site_count: sites.length,
+        capacity_kw: sites.reduce((sum, site) => sum + (Number(site.capacity_kw) || 0), 0),
+        current_power_kw: sites.reduce((sum, site) => sum + (Number(site.current_power_kw) || 0), 0),
+        today_energy_kwh: sites.reduce((sum, site) => sum + (Number(site.today_energy_kwh) || 0), 0),
+        month_energy_kwh: sites.reduce((sum, site) => sum + (Number(site.month_energy_kwh) || 0), 0),
+        lifetime_energy_kwh: sites.reduce((sum, site) => sum + (Number(site.lifetime_energy_kwh) || 0), 0),
+        normal_count: counts.normal,
+        offline_count: counts.offline,
+        faulty_count: counts.faulty,
+        unknown_count: counts.unknown,
+      };
+    });
+  return {
+    sourceRows,
+    exceptionRows: state.sites.filter((site) => ["faulty", "offline", "unknown"].includes(statusBucket(site.status))),
+  };
+}
+
 function renderTable() {
   const rows = filteredSites();
   elements.rowCount.textContent = `${rows.length} sites`;
@@ -85,20 +132,60 @@ function renderTable() {
     .map((site) => {
       const bucket = statusBucket(site.status);
       return `<tr>
-        <td><span class="badge">${site.source || "--"}</span></td>
-        <td class="${bucket}">${site.status || bucket}</td>
-        <td>${site.site_name || "--"}</td>
-        <td>${site.installed_date || "--"}</td>
+        <td><span class="badge">${escapeHtml(site.source || "--")}</span></td>
+        <td class="${bucket}">${escapeHtml(site.status || bucket)}</td>
+        <td>${escapeHtml(site.site_name || "--")}</td>
+        <td>${escapeHtml(site.installed_date || "--")}</td>
         <td>${number(site.capacity_kw)}</td>
         <td>${number(site.battery_capacity_kwh)}</td>
         <td>${number(site.current_power_kw)}</td>
         <td>${number(site.today_energy_kwh)}</td>
         <td>${number(site.month_energy_kwh)}</td>
         <td>${number(site.lifetime_energy_kwh)}</td>
-        <td>${site.last_sync || "--"}</td>
+        <td>${escapeHtml(site.last_sync || "--")}</td>
       </tr>`;
     })
     .join("");
+}
+
+function renderReports() {
+  const report = buildReport();
+  const offlineFaulty = report.exceptionRows.length;
+  elements.reportKpis.innerHTML = [
+    ["Report Sites", number(state.sites.length, 0)],
+    ["Today Yield", `${number(state.summary.today_energy_kwh)} kWh`],
+    ["Total Capacity", `${number(state.summary.total_capacity_kw)} kWp`],
+    ["Exceptions", number(offlineFaulty, 0)],
+  ].map(([label, value]) => `<article class="card"><label>${label}</label><strong>${value}</strong></article>`).join("");
+
+  elements.reportSummaryCount.textContent = `${report.sourceRows.length} sources`;
+  elements.reportSummaryRows.innerHTML = report.sourceRows.map((row) => `<tr>
+    <td><span class="badge">${escapeHtml(row.source)}</span></td>
+    <td>${number(row.site_count, 0)}</td>
+    <td>${number(row.capacity_kw)}</td>
+    <td>${number(row.current_power_kw)}</td>
+    <td>${number(row.today_energy_kwh)}</td>
+    <td>${number(row.month_energy_kwh)}</td>
+    <td>${number(row.lifetime_energy_kwh)}</td>
+    <td class="ok">${number(row.normal_count, 0)}</td>
+    <td class="offline">${number(row.offline_count, 0)}</td>
+    <td class="faulty">${number(row.faulty_count, 0)}</td>
+    <td class="unknown">${number(row.unknown_count, 0)}</td>
+  </tr>`).join("");
+
+  elements.exceptionCount.textContent = `${report.exceptionRows.length} exceptions`;
+  elements.exceptionRows.innerHTML = report.exceptionRows.map((site) => {
+    const bucket = statusBucket(site.status);
+    return `<tr>
+      <td><span class="badge">${escapeHtml(site.source || "--")}</span></td>
+      <td class="${bucket}">${escapeHtml(site.status || bucket)}</td>
+      <td>${escapeHtml(site.site_name || "--")}</td>
+      <td>${number(site.capacity_kw)}</td>
+      <td>${number(site.current_power_kw)}</td>
+      <td>${number(site.today_energy_kwh)}</td>
+      <td>${escapeHtml(site.last_sync || "--")}</td>
+    </tr>`;
+  }).join("");
 }
 
 function renderErrors(errors) {
@@ -117,6 +204,48 @@ function render() {
   renderTable();
   renderErrors(state.errors);
   renderCacheMeta();
+  renderReports();
+  renderView();
+}
+
+function renderView() {
+  for (const section of elements.viewSections) section.hidden = section.dataset.view !== state.view;
+  for (const link of elements.viewLinks) link.classList.toggle("active", link.dataset.viewLink === state.view);
+}
+
+function setView(view) {
+  state.view = view;
+  window.location.hash = view;
+  renderView();
+  if (view === "reports") renderReports();
+}
+
+function rowsToCsv(rows, fields) {
+  const escapeCell = (value) => {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return [fields.join(","), ...rows.map((row) => fields.map((field) => escapeCell(row[field])).join(","))].join("\n");
+}
+
+function downloadCsv(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportSummaryReport() {
+  const rows = buildReport().sourceRows;
+  downloadCsv("solar-source-summary.csv", rowsToCsv(rows, ["source", "site_count", "capacity_kw", "current_power_kw", "today_energy_kwh", "month_energy_kwh", "lifetime_energy_kwh", "normal_count", "offline_count", "faulty_count", "unknown_count"]));
+}
+
+function exportExceptionReport() {
+  const rows = buildReport().exceptionRows;
+  downloadCsv("solar-exceptions.csv", rowsToCsv(rows, ["source", "status", "site_id", "site_name", "capacity_kw", "current_power_kw", "today_energy_kwh", "last_sync"]));
 }
 
 async function loadData(refresh = false) {
@@ -144,5 +273,14 @@ for (const input of [elements.query, elements.source, elements.status, elements.
   input.addEventListener("input", renderTable);
 }
 elements.refresh.addEventListener("click", () => loadData(true));
+elements.exportSummary.addEventListener("click", exportSummaryReport);
+elements.exportExceptions.addEventListener("click", exportExceptionReport);
+for (const link of elements.viewLinks) {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    setView(link.dataset.viewLink);
+  });
+}
 
+state.view = window.location.hash === "#reports" ? "reports" : "dashboard";
 loadData(false);

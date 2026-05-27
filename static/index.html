@@ -16,16 +16,16 @@
         </div>
       </div>
       <nav class="nav">
-        <a class="active">Dashboard</a>
+        <a class="active" data-view-link="dashboard" href="#dashboard">Dashboard</a>
         <a>Sites</a>
-        <a>Reports</a>
+        <a data-view-link="reports" href="#reports">Reports</a>
         <a>Alerts</a>
         <a>Settings</a>
       </nav>
     </header>
 
     <main class="page">
-      <section class="title-row">
+      <section class="title-row" data-view="dashboard">
         <div>
           <h1>Solar Operations</h1>
           <p>Unified Huawei and Atmoce site monitoring.</p>
@@ -37,52 +37,119 @@
       </section>
       <p class="cache-meta" id="cacheMeta"></p>
 
-      <section class="kpis" id="kpis"></section>
+      <div data-view="dashboard">
+        <section class="kpis" id="kpis"></section>
 
-      <section class="health" id="sourceHealth"></section>
+        <section class="health" id="sourceHealth"></section>
 
-      <section class="toolbar">
-        <input id="queryInput" type="search" placeholder="Site name or ID" />
-        <select id="sourceFilter">
-          <option value="all">All sources</option>
-          <option value="huawei">Huawei</option>
-          <option value="atmoce">Atmoce</option>
-        </select>
-        <select id="statusFilter">
-          <option value="all">All status</option>
-          <option value="normal">Normal</option>
-          <option value="faulty">Faulty</option>
-          <option value="offline">Offline</option>
-          <option value="unknown">Unknown</option>
-        </select>
-        <input id="countryFilter" type="search" placeholder="Country/Region" />
-      </section>
+        <section class="toolbar">
+          <input id="queryInput" type="search" placeholder="Site name or ID" />
+          <select id="sourceFilter">
+            <option value="all">All sources</option>
+            <option value="huawei">Huawei</option>
+            <option value="atmoce">Atmoce</option>
+          </select>
+          <select id="statusFilter">
+            <option value="all">All status</option>
+            <option value="normal">Normal</option>
+            <option value="faulty">Faulty</option>
+            <option value="offline">Offline</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <input id="countryFilter" type="search" placeholder="Country/Region" />
+        </section>
 
-      <section class="table-shell">
-        <div class="table-header">
-          <h2>Sites</h2>
-          <span id="rowCount">0 sites</span>
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>Sites</h2>
+            <span id="rowCount">0 sites</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Site Name</th>
+                  <th>Install/Grid Date</th>
+                  <th>Capacity kWp</th>
+                  <th>Battery kWh</th>
+                  <th>Current kW</th>
+                  <th>Today kWh</th>
+                  <th>Month kWh</th>
+                  <th>Lifetime kWh</th>
+                  <th>Last Sync</th>
+                </tr>
+              </thead>
+              <tbody id="siteRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section data-view="reports" hidden>
+        <div class="title-row">
+          <div>
+            <h1>Reports</h1>
+            <p>Cached daily operations reports from the current dashboard dataset.</p>
+          </div>
+          <div class="actions">
+            <button id="exportSummaryButton" type="button">Export Summary</button>
+            <button id="exportExceptionsButton" class="secondary" type="button">Export Exceptions</button>
+          </div>
         </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Site Name</th>
-                <th>Install/Grid Date</th>
-                <th>Capacity kWp</th>
-                <th>Battery kWh</th>
-                <th>Current kW</th>
-                <th>Today kWh</th>
-                <th>Month kWh</th>
-                <th>Lifetime kWh</th>
-                <th>Last Sync</th>
-              </tr>
-            </thead>
-            <tbody id="siteRows"></tbody>
-          </table>
-        </div>
+
+        <section class="kpis report-kpis" id="reportKpis"></section>
+
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>Source Summary</h2>
+            <span id="reportSummaryCount">0 sources</span>
+          </div>
+          <div class="table-scroll">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Sites</th>
+                  <th>Capacity kWp</th>
+                  <th>Current kW</th>
+                  <th>Today kWh</th>
+                  <th>Month kWh</th>
+                  <th>Lifetime kWh</th>
+                  <th>Normal</th>
+                  <th>Offline</th>
+                  <th>Faulty</th>
+                  <th>Unknown</th>
+                </tr>
+              </thead>
+              <tbody id="reportSummaryRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>Exception Report</h2>
+            <span id="exceptionCount">0 exceptions</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Site Name</th>
+                  <th>Capacity kWp</th>
+                  <th>Current kW</th>
+                  <th>Today kWh</th>
+                  <th>Last Sync</th>
+                </tr>
+              </thead>
+              <tbody id="exceptionRows"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       <section class="empty" id="emptyState" hidden>No site data loaded. Press Refresh to fetch the latest data.</section>

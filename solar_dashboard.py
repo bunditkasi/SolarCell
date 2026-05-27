@@ -76,6 +76,36 @@ def filter_sites(sites, source="all", status="all", query="", country=""):
     return filtered
 
 
+def build_report(sites):
+    source_rows = []
+    for source in sorted({site.get("source") or "unknown" for site in sites}):
+        rows = [site for site in sites if (site.get("source") or "unknown") == source]
+        status_counts = {"normal": 0, "faulty": 0, "offline": 0, "unknown": 0}
+        for site in rows:
+            status_counts[_status_bucket(site.get("status"))] += 1
+        source_rows.append(
+            {
+                "source": source,
+                "site_count": len(rows),
+                "capacity_kw": round(sum(_num(site.get("capacity_kw")) for site in rows), 3),
+                "current_power_kw": round(sum(_num(site.get("current_power_kw")) for site in rows), 3),
+                "today_energy_kwh": round(sum(_num(site.get("today_energy_kwh")) for site in rows), 3),
+                "month_energy_kwh": round(sum(_num(site.get("month_energy_kwh")) for site in rows), 3),
+                "lifetime_energy_kwh": round(sum(_num(site.get("lifetime_energy_kwh")) for site in rows), 3),
+                "normal_count": status_counts["normal"],
+                "faulty_count": status_counts["faulty"],
+                "offline_count": status_counts["offline"],
+                "unknown_count": status_counts["unknown"],
+            }
+        )
+    exception_rows = [
+        site
+        for site in sites
+        if _status_bucket(site.get("status")) in {"faulty", "offline", "unknown"}
+    ]
+    return {"source_rows": source_rows, "exception_rows": exception_rows}
+
+
 def sites_to_csv(sites):
     fields = list(COMMON_FIELDS)
     for extra in ("last_sync", "collector_status"):
