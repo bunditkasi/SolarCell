@@ -2,7 +2,7 @@ import unittest
 from contextlib import redirect_stderr
 from io import StringIO
 
-from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
+from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, fetch_huawei01_stations, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -170,10 +170,37 @@ class NormalizeSolarDataTest(unittest.TestCase):
             }
         )
 
-        self.assertIsInstance(fetcher.__self__, HuaweiClient)
-        self.assertEqual(fetcher.__self__.source, "huawei01")
-        self.assertEqual(fetcher.__self__.username, "mrdiy_solar")
-        self.assertEqual(fetcher.__self__.system_code, "mrdiy1234")
+        self.assertTrue(callable(fetcher))
+
+    def test_fetch_huawei01_stations_supplements_api_with_missing_snapshot_sites(self):
+        api_rows = [
+            {
+                "source": "huawei01",
+                "site_id": "NE=50806243",
+                "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+                "collector_status": "ok",
+            }
+        ]
+        snapshot_rows = [
+            {
+                "source": "huawei01",
+                "site_id": "NE=50806243",
+                "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+                "collector_status": "ok",
+            },
+            {
+                "source": "huawei01",
+                "site_id": "NE=51027412",
+                "site_name": "MR.DIY DC",
+                "collector_status": "ok",
+            },
+        ]
+
+        rows = fetch_huawei01_stations(lambda: api_rows, lambda: snapshot_rows)
+
+        self.assertEqual([row["site_id"] for row in rows], ["NE=50806243", "NE=51027412"])
+        self.assertEqual(rows[0]["collector_status"], "degraded")
+        self.assertEqual(rows[1]["collector_status"], "degraded")
 
 
 if __name__ == "__main__":

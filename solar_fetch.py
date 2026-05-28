@@ -407,8 +407,20 @@ def build_huawei01_fetcher(environ=None):
             environ.get("HUAWEI01_SYSTEM_CODE") or environ.get("HUAWEI01_PASSWORD"),
             source="huawei01",
         )
-        return client.fetch_stations
+        return lambda: fetch_huawei01_stations(client.fetch_stations, load_huawei01_snapshot)
     return load_huawei01_snapshot
+
+
+def fetch_huawei01_stations(api_fetcher, snapshot_fetcher):
+    api_rows = api_fetcher()
+    snapshot_rows = snapshot_fetcher()
+    seen = {row.get("site_id") for row in api_rows if row.get("site_id")}
+    missing = [row for row in snapshot_rows if row.get("site_id") and row.get("site_id") not in seen]
+    if not missing:
+        return api_rows
+    rows = [dict(row, collector_status="degraded") for row in api_rows]
+    rows.extend(dict(row, collector_status="degraded") for row in missing)
+    return rows
 
 
 def fetch_all():
