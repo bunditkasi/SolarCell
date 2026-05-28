@@ -135,12 +135,12 @@ def normalize_atmoce_openapi_site(site, last_power=None, energy=None):
     }
 
 
-def normalize_huawei_station(station, kpi=None, collector_status="ok"):
+def normalize_huawei_station(station, kpi=None, collector_status="ok", source="huawei"):
     data = (kpi or {}).get("dataItemMap") or {}
     capacity_mw = _float_or_none(station.get("capacity"))
     current_power_kw = _float_or_none(data.get("active_power") or data.get("current_power"))
     return {
-        "source": "huawei",
+        "source": source,
         "site_id": station.get("stationCode") or "",
         "site_name": station.get("stationName") or "",
         "status": f"health_state_{data.get('real_health_state')}" if data.get("real_health_state") is not None else "",
@@ -334,10 +334,11 @@ class AtmoceOpenApiClient:
 
 
 class HuaweiClient:
-    def __init__(self, base_url, username, system_code):
+    def __init__(self, base_url, username, system_code, source="huawei"):
         self.base_url = base_url.rstrip("/")
         self.username = username
         self.system_code = system_code
+        self.source = source
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
         self.xsrf_token = None
 
@@ -389,9 +390,25 @@ class HuaweiClient:
                 station,
                 kpi_by_code.get(station.get("stationCode")),
                 collector_status=status,
+                source=self.source,
             )
             for station in stations
         ]
+
+
+def build_huawei01_fetcher(environ=None):
+    environ = environ or os.environ
+    if environ.get("HUAWEI01_USERNAME") and (
+        environ.get("HUAWEI01_SYSTEM_CODE") or environ.get("HUAWEI01_PASSWORD")
+    ):
+        client = HuaweiClient(
+            environ.get("HUAWEI01_BASE_URL") or environ.get("HUAWEI_BASE_URL", "https://kr5.fusionsolar.huawei.com"),
+            environ.get("HUAWEI01_USERNAME"),
+            environ.get("HUAWEI01_SYSTEM_CODE") or environ.get("HUAWEI01_PASSWORD"),
+            source="huawei01",
+        )
+        return client.fetch_stations
+    return load_huawei01_snapshot
 
 
 def fetch_all():
@@ -416,7 +433,7 @@ def fetch_all():
     return (
         _fetch_source("Atmoce", atmoce.fetch_stations)
         + _fetch_source("Huawei", huawei.fetch_stations)
-        + _fetch_source("Huawei01", load_huawei01_snapshot)
+        + _fetch_source("Huawei01", build_huawei01_fetcher())
     )
 
 

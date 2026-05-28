@@ -2,7 +2,7 @@ import unittest
 from contextlib import redirect_stderr
 from io import StringIO
 
-from solar_fetch import HuaweiClient, _fetch_source, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
+from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -86,9 +86,9 @@ class NormalizeSolarDataTest(unittest.TestCase):
             },
         }
 
-        normalized = normalize_huawei_station(station, kpi)
+        normalized = normalize_huawei_station(station, kpi, source="huawei01")
 
-        self.assertEqual(normalized["source"], "huawei")
+        self.assertEqual(normalized["source"], "huawei01")
         self.assertEqual(normalized["site_id"], "NE=55039818")
         self.assertEqual(normalized["site_name"], "12  PLPR  Mr.DIY Nern payom.")
         self.assertEqual(normalized["capacity_kw"], 38.72)
@@ -101,7 +101,7 @@ class NormalizeSolarDataTest(unittest.TestCase):
     def test_huawei_fetch_stations_keeps_station_list_when_realtime_kpi_is_rate_limited(self):
         class FakeHuaweiClient(HuaweiClient):
             def __init__(self):
-                pass
+                self.source = "huawei01"
 
             def post(self, path, payload):
                 if path == "/thirdData/getStationList":
@@ -123,6 +123,7 @@ class NormalizeSolarDataTest(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["site_id"], "NE=1")
+        self.assertEqual(rows[0]["source"], "huawei01")
         self.assertEqual(rows[0]["capacity_kw"], 31.2)
         self.assertIsNone(rows[0]["today_energy_kwh"])
         self.assertEqual(rows[0]["collector_status"], "degraded")
@@ -159,6 +160,20 @@ class NormalizeSolarDataTest(unittest.TestCase):
             rows = _fetch_source("Demo", lambda: (_ for _ in ()).throw(RuntimeError("rate limited")))
 
         self.assertEqual(rows, [])
+
+    def test_build_huawei01_fetcher_prefers_api_when_credentials_are_present(self):
+        fetcher = build_huawei01_fetcher(
+            {
+                "HUAWEI01_USERNAME": "mrdiy_solar",
+                "HUAWEI01_SYSTEM_CODE": "mrdiy1234",
+                "HUAWEI01_JSON_PATH": "data/huawei01_sites.json",
+            }
+        )
+
+        self.assertIsInstance(fetcher.__self__, HuaweiClient)
+        self.assertEqual(fetcher.__self__.source, "huawei01")
+        self.assertEqual(fetcher.__self__.username, "mrdiy_solar")
+        self.assertEqual(fetcher.__self__.system_code, "mrdiy1234")
 
 
 if __name__ == "__main__":
