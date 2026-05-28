@@ -208,6 +208,26 @@ class NormalizeSolarDataTest(unittest.TestCase):
         self.assertEqual(rows[0]["collector_status"], "degraded")
         self.assertEqual(rows[1]["collector_status"], "degraded")
 
+    def test_fetch_huawei01_stations_falls_back_to_snapshot_when_api_fails(self):
+        snapshot_rows = [
+            {
+                "source": "huawei01",
+                "site_id": "NE=50806243",
+                "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+                "collector_status": "ok",
+            }
+        ]
+
+        with redirect_stderr(StringIO()):
+            rows = fetch_huawei01_stations(
+                lambda: (_ for _ in ()).throw(RuntimeError("rate limited")),
+                lambda: snapshot_rows,
+            )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["site_id"], "NE=50806243")
+        self.assertEqual(rows[0]["collector_status"], "degraded")
+
 
 if __name__ == "__main__":
     unittest.main()

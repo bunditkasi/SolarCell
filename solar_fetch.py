@@ -412,8 +412,12 @@ def build_huawei01_fetcher(environ=None):
 
 
 def fetch_huawei01_stations(api_fetcher, snapshot_fetcher):
-    api_rows = api_fetcher()
     snapshot_rows = snapshot_fetcher()
+    try:
+        api_rows = api_fetcher()
+    except Exception as exc:
+        print(f"Warning: Huawei01 API fetch failed; using web snapshot fallback: {exc}", file=sys.stderr)
+        return [dict(row, collector_status="degraded") for row in snapshot_rows]
     snapshot_by_id = {row.get("site_id"): row for row in snapshot_rows if row.get("site_id")}
     rows = []
     for row in api_rows:
