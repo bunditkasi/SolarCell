@@ -178,6 +178,8 @@ class NormalizeSolarDataTest(unittest.TestCase):
                 "source": "huawei01",
                 "site_id": "NE=50806243",
                 "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+                "status": "",
+                "current_power_kw": None,
                 "collector_status": "ok",
             }
         ]
@@ -186,6 +188,8 @@ class NormalizeSolarDataTest(unittest.TestCase):
                 "source": "huawei01",
                 "site_id": "NE=50806243",
                 "site_name": "PLBK Mr.DIY สาขาบางปลากด",
+                "status": "health_state_3",
+                "current_power_kw": 11.84,
                 "collector_status": "ok",
             },
             {
@@ -199,6 +203,8 @@ class NormalizeSolarDataTest(unittest.TestCase):
         rows = fetch_huawei01_stations(lambda: api_rows, lambda: snapshot_rows)
 
         self.assertEqual([row["site_id"] for row in rows], ["NE=50806243", "NE=51027412"])
+        self.assertEqual(rows[0]["status"], "health_state_3")
+        self.assertEqual(rows[0]["current_power_kw"], 11.84)
         self.assertEqual(rows[0]["collector_status"], "degraded")
         self.assertEqual(rows[1]["collector_status"], "degraded")
 

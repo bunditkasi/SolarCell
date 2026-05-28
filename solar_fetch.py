@@ -414,11 +414,18 @@ def build_huawei01_fetcher(environ=None):
 def fetch_huawei01_stations(api_fetcher, snapshot_fetcher):
     api_rows = api_fetcher()
     snapshot_rows = snapshot_fetcher()
-    seen = {row.get("site_id") for row in api_rows if row.get("site_id")}
+    snapshot_by_id = {row.get("site_id"): row for row in snapshot_rows if row.get("site_id")}
+    rows = []
+    for row in api_rows:
+        snapshot = snapshot_by_id.get(row.get("site_id")) or {}
+        merged = dict(snapshot)
+        merged.update({key: value for key, value in row.items() if value not in (None, "")})
+        rows.append(merged)
+    seen = {row.get("site_id") for row in rows if row.get("site_id")}
     missing = [row for row in snapshot_rows if row.get("site_id") and row.get("site_id") not in seen]
     if not missing:
-        return api_rows
-    rows = [dict(row, collector_status="degraded") for row in api_rows]
+        return rows
+    rows = [dict(row, collector_status="degraded") for row in rows]
     rows.extend(dict(row, collector_status="degraded") for row in missing)
     return rows
 
