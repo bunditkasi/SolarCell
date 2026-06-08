@@ -119,6 +119,18 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(len(report["exception_rows"]), 1)
         self.assertEqual(report["exception_rows"][0]["site_name"], "Offline Branch")
 
+    def test_build_report_includes_site_performance_and_source_health_detail(self):
+        report = build_report(SITES)
+
+        self.assertEqual(report["performance_rows"][0]["site_name"], "PKON")
+        self.assertEqual(report["performance_rows"][0]["yield_per_kwp"], 3.883)
+        self.assertEqual(report["performance_rows"][0]["current_load_percent"], 69.93)
+        self.assertEqual(report["performance_rows"][-1]["site_name"], "Offline Branch")
+        self.assertEqual(report["health_rows"][0]["source"], "atmoce")
+        self.assertEqual(report["health_rows"][0]["collector_status"], "ok")
+        self.assertEqual(report["health_rows"][1]["source"], "huawei")
+        self.assertEqual(report["health_rows"][1]["collector_status"], "degraded")
+
 
 if __name__ == "__main__":
     unittest.main()

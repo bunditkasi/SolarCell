@@ -78,11 +78,18 @@ def filter_sites(sites, source="all", status="all", query="", country=""):
 
 def build_report(sites):
     source_rows = []
+    health_rows = []
     for source in sorted({site.get("source") or "unknown" for site in sites}):
         rows = [site for site in sites if (site.get("source") or "unknown") == source]
         status_counts = {"normal": 0, "faulty": 0, "offline": 0, "unknown": 0}
+        collector_status = "ok"
         for site in rows:
             status_counts[_status_bucket(site.get("status"))] += 1
+            next_status = site.get("collector_status") or "ok"
+            if next_status == "failed":
+                collector_status = "failed"
+            elif next_status == "degraded" and collector_status != "failed":
+                collector_status = "degraded"
         source_rows.append(
             {
                 "source": source,
@@ -98,12 +105,53 @@ def build_report(sites):
                 "unknown_count": status_counts["unknown"],
             }
         )
+        health_rows.append(
+            {
+                "source": source,
+                "collector_status": collector_status,
+                "normal_count": status_counts["normal"],
+                "offline_count": status_counts["offline"],
+                "faulty_count": status_counts["faulty"],
+                "unknown_count": status_counts["unknown"],
+            }
+        )
     exception_rows = [
         site
         for site in sites
         if _status_bucket(site.get("status")) in {"faulty", "offline", "unknown"}
     ]
-    return {"source_rows": source_rows, "exception_rows": exception_rows}
+    performance_rows = []
+    for site in sites:
+        capacity = _num(site.get("capacity_kw"))
+        today_energy = _num(site.get("today_energy_kwh"))
+        current_power = _num(site.get("current_power_kw"))
+        performance_rows.append(
+            {
+                "source": site.get("source") or "unknown",
+                "site_id": site.get("site_id") or "",
+                "site_name": site.get("site_name") or "",
+                "status": site.get("status") or "",
+                "capacity_kw": site.get("capacity_kw"),
+                "current_power_kw": site.get("current_power_kw"),
+                "today_energy_kwh": site.get("today_energy_kwh"),
+                "yield_per_kwp": round(today_energy / capacity, 3) if capacity else None,
+                "current_load_percent": round((current_power / capacity) * 100, 2) if capacity else None,
+            }
+        )
+    performance_rows.sort(
+        key=lambda row: (
+            row["yield_per_kwp"] is not None,
+            row["yield_per_kwp"] or 0,
+            row["today_energy_kwh"] or 0,
+        ),
+        reverse=True,
+    )
+    return {
+        "source_rows": source_rows,
+        "exception_rows": exception_rows,
+        "performance_rows": performance_rows,
+        "health_rows": health_rows,
+    }
 
 
 def sites_to_csv(sites):

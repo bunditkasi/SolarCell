@@ -96,6 +96,7 @@
           </div>
           <div class="actions">
             <button id="exportSummaryButton" type="button">Export Summary</button>
+            <button id="exportPerformanceButton" class="secondary" type="button">Export Performance</button>
             <button id="exportExceptionsButton" class="secondary" type="button">Export Exceptions</button>
           </div>
         </div>
@@ -125,6 +126,52 @@
                 </tr>
               </thead>
               <tbody id="reportSummaryRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>Source Health</h2>
+            <span id="reportHealthCount">0 sources</span>
+          </div>
+          <div class="table-scroll">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Collector</th>
+                  <th>Normal</th>
+                  <th>Offline</th>
+                  <th>Faulty</th>
+                  <th>Unknown</th>
+                </tr>
+              </thead>
+              <tbody id="reportHealthRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>Site Performance</h2>
+            <span id="performanceCount">0 sites</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Site Name</th>
+                  <th>Capacity kWp</th>
+                  <th>Current kW</th>
+                  <th>Today kWh</th>
+                  <th>Yield kWh/kWp</th>
+                  <th>Current Load %</th>
+                </tr>
+              </thead>
+              <tbody id="performanceRows"></tbody>
             </table>
           </div>
         </section>

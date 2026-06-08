@@ -22,9 +22,14 @@ const elements = {
   reportKpis: document.querySelector("#reportKpis"),
   reportSummaryRows: document.querySelector("#reportSummaryRows"),
   reportSummaryCount: document.querySelector("#reportSummaryCount"),
+  reportHealthRows: document.querySelector("#reportHealthRows"),
+  reportHealthCount: document.querySelector("#reportHealthCount"),
+  performanceRows: document.querySelector("#performanceRows"),
+  performanceCount: document.querySelector("#performanceCount"),
   exceptionRows: document.querySelector("#exceptionRows"),
   exceptionCount: document.querySelector("#exceptionCount"),
   exportSummary: document.querySelector("#exportSummaryButton"),
+  exportPerformance: document.querySelector("#exportPerformanceButton"),
   exportExceptions: document.querySelector("#exportExceptionsButton"),
   query: document.querySelector("#queryInput"),
   source: document.querySelector("#sourceFilter"),
@@ -110,7 +115,13 @@ function buildReport() {
     .map((source) => {
       const sites = state.sites.filter((site) => (site.source || "unknown") === source);
       const counts = { normal: 0, faulty: 0, offline: 0, unknown: 0 };
+      let collectorStatus = "ok";
       for (const site of sites) counts[statusBucket(site.status)] += 1;
+      for (const site of sites) {
+        const nextStatus = site.collector_status || "ok";
+        if (nextStatus === "failed") collectorStatus = "failed";
+        else if (nextStatus === "degraded" && collectorStatus !== "failed") collectorStatus = "degraded";
+      }
       return {
         source,
         site_count: sites.length,
@@ -123,10 +134,38 @@ function buildReport() {
         offline_count: counts.offline,
         faulty_count: counts.faulty,
         unknown_count: counts.unknown,
+        collector_status: collectorStatus,
       };
     });
+  const performanceRows = state.sites
+    .map((site) => {
+      const capacity = Number(site.capacity_kw) || 0;
+      const today = Number(site.today_energy_kwh) || 0;
+      const current = Number(site.current_power_kw) || 0;
+      return {
+        source: site.source || "unknown",
+        site_id: site.site_id || "",
+        site_name: site.site_name || "",
+        status: site.status || "",
+        capacity_kw: site.capacity_kw,
+        current_power_kw: site.current_power_kw,
+        today_energy_kwh: site.today_energy_kwh,
+        yield_per_kwp: capacity ? today / capacity : null,
+        current_load_percent: capacity ? (current / capacity) * 100 : null,
+      };
+    })
+    .sort((a, b) => (b.yield_per_kwp ?? -1) - (a.yield_per_kwp ?? -1));
   return {
     sourceRows,
+    healthRows: sourceRows.map((row) => ({
+      source: row.source,
+      collector_status: row.collector_status,
+      normal_count: row.normal_count,
+      offline_count: row.offline_count,
+      faulty_count: row.faulty_count,
+      unknown_count: row.unknown_count,
+    })),
+    performanceRows,
     exceptionRows: state.sites.filter((site) => ["faulty", "offline", "unknown"].includes(statusBucket(site.status))),
   };
 }
@@ -180,6 +219,32 @@ function renderReports() {
     <td class="faulty">${number(row.faulty_count, 0)}</td>
     <td class="unknown">${number(row.unknown_count, 0)}</td>
   </tr>`).join("");
+
+  elements.reportHealthCount.textContent = `${report.healthRows.length} sources`;
+  elements.reportHealthRows.innerHTML = report.healthRows.map((row) => `<tr>
+    <td><span class="badge">${escapeHtml(row.source)}</span></td>
+    <td class="${escapeHtml(row.collector_status)}">${escapeHtml(row.collector_status)}</td>
+    <td class="ok">${number(row.normal_count, 0)}</td>
+    <td class="offline">${number(row.offline_count, 0)}</td>
+    <td class="faulty">${number(row.faulty_count, 0)}</td>
+    <td class="unknown">${number(row.unknown_count, 0)}</td>
+  </tr>`).join("");
+
+  elements.performanceCount.textContent = `${report.performanceRows.length} sites`;
+  elements.performanceRows.innerHTML = report.performanceRows.map((site) => {
+    const bucket = statusBucket(site.status);
+    const rowClass = ["offline", "faulty"].includes(bucket) ? "alert-row" : "";
+    return `<tr class="${rowClass}">
+      <td><span class="badge">${escapeHtml(site.source || "--")}</span></td>
+      <td class="${bucket}">${escapeHtml(site.status || bucket)}</td>
+      <td>${escapeHtml(site.site_name || "--")}</td>
+      <td>${number(site.capacity_kw)}</td>
+      <td>${number(site.current_power_kw)}</td>
+      <td>${number(site.today_energy_kwh)}</td>
+      <td>${number(site.yield_per_kwp, 3)}</td>
+      <td>${number(site.current_load_percent)}</td>
+    </tr>`;
+  }).join("");
 
   elements.exceptionCount.textContent = `${report.exceptionRows.length} exceptions`;
   elements.exceptionRows.innerHTML = report.exceptionRows.map((site) => {
@@ -256,6 +321,11 @@ function exportExceptionReport() {
   downloadCsv("solar-exceptions.csv", rowsToCsv(rows, ["source", "status", "site_id", "site_name", "capacity_kw", "current_power_kw", "today_energy_kwh", "last_sync"]));
 }
 
+function exportPerformanceReport() {
+  const rows = buildReport().performanceRows;
+  downloadCsv("solar-site-performance.csv", rowsToCsv(rows, ["source", "status", "site_id", "site_name", "capacity_kw", "current_power_kw", "today_energy_kwh", "yield_per_kwp", "current_load_percent"]));
+}
+
 async function loadData(refresh = false) {
   elements.refresh.disabled = true;
   const response = await fetch(refresh ? "/api/refresh" : "/api/sites", { method: refresh ? "POST" : "GET" });
@@ -282,6 +352,7 @@ for (const input of [elements.query, elements.source, elements.status, elements.
 }
 elements.refresh.addEventListener("click", () => loadData(true));
 elements.exportSummary.addEventListener("click", exportSummaryReport);
+elements.exportPerformance.addEventListener("click", exportPerformanceReport);
 elements.exportExceptions.addEventListener("click", exportExceptionReport);
 for (const link of elements.viewLinks) {
   link.addEventListener("click", (event) => {
