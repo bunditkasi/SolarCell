@@ -12,6 +12,10 @@
     {
       "source": "/api/report.csv",
       "destination": "/api/report"
+    },
+    {
+      "source": "/api/report.html",
+      "destination": "/api/report_html"
     }
   ]
 }

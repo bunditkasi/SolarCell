@@ -9,6 +9,7 @@ from solar_dashboard import (
     filter_sites,
     refresh_cache,
     build_report_payload,
+    report_to_html,
     report_to_csv,
     sites_to_csv,
     summarize_sites,
@@ -158,6 +159,26 @@ class DashboardAggregationTest(unittest.TestCase):
         health_text = report_to_csv(report, "health")
         health_rows = list(csv.DictReader(io.StringIO(health_text)))
         self.assertEqual(health_rows[1]["collector_status"], "degraded")
+
+    def test_report_to_html_renders_printable_operations_report(self):
+        payload = build_report_payload(
+            {
+                "sites": SITES,
+                "summary": summarize_sites(SITES),
+                "errors": [],
+                "last_refresh_at": "2026-06-08T01:00:00+00:00",
+            }
+        )
+
+        html = report_to_html(payload)
+
+        self.assertIn("<title>Solar Operations Report</title>", html)
+        self.assertIn("Solar Operations Report", html)
+        self.assertIn("Source Health", html)
+        self.assertIn("Site Performance", html)
+        self.assertIn("Exception Report", html)
+        self.assertIn("Offline Branch", html)
+        self.assertIn("2026-06-08T01:00:00+00:00", html)
 
 
 if __name__ == "__main__":

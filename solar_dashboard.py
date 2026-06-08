@@ -1,4 +1,5 @@
 import csv
+import html
 import io
 import json
 from datetime import datetime, timezone
@@ -230,6 +231,76 @@ def report_to_csv(report, kind):
     return handle.getvalue()
 
 
+def _html_rows(rows, fields):
+    output = []
+    for row in rows:
+        cells = "".join(
+            f"<td>{html.escape(str(row.get(field) if row.get(field) is not None else ''))}</td>"
+            for field in fields
+        )
+        output.append(f"<tr>{cells}</tr>")
+    if not output:
+        output.append(f"<tr><td colspan=\"{len(fields)}\">No records</td></tr>")
+    return "".join(output)
+
+
+def _report_table(rows, fields, headings=None):
+    headings = headings or fields
+    header = "".join(f"<th>{html.escape(str(label))}</th>" for label in headings)
+    return f"<table><thead><tr>{header}</tr></thead><tbody>{_html_rows(rows, fields)}</tbody></table>"
+
+
+def report_to_html(payload):
+    summary = payload.get("summary") or {}
+    report = payload.get("report") or {}
+    generated_at = payload.get("last_refresh_at") or ""
+    source_fields = REPORT_CSV_FIELDS["summary"]
+    health_fields = REPORT_CSV_FIELDS["health"]
+    performance_fields = REPORT_CSV_FIELDS["performance"]
+    exception_fields = REPORT_CSV_FIELDS["exceptions"]
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Solar Operations Report</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; color: #1f2933; margin: 24px; }}
+      header {{ border-bottom: 2px solid #111827; margin-bottom: 18px; padding-bottom: 12px; }}
+      h1 {{ font-size: 24px; margin: 0 0 6px; }}
+      h2 {{ font-size: 16px; margin: 22px 0 8px; }}
+      .meta, .kpi label {{ color: #667482; font-size: 12px; }}
+      .kpis {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }}
+      .kpi {{ border: 1px solid #dfe5ec; padding: 10px; }}
+      .kpi strong {{ display: block; font-size: 18px; margin-top: 4px; }}
+      table {{ width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }}
+      th, td {{ border: 1px solid #dfe5ec; padding: 6px; text-align: left; vertical-align: top; }}
+      th {{ background: #f8fafc; }}
+      @media print {{ body {{ margin: 12mm; }} .page-break {{ break-before: page; }} }}
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Solar Operations Report</h1>
+      <div class="meta">Generated from dashboard data: {html.escape(str(generated_at))}</div>
+    </header>
+    <section class="kpis">
+      <div class="kpi"><label>Total Sites</label><strong>{summary.get('site_count', 0)}</strong></div>
+      <div class="kpi"><label>Current Power kW</label><strong>{summary.get('current_power_kw', 0)}</strong></div>
+      <div class="kpi"><label>Today kWh</label><strong>{summary.get('today_energy_kwh', 0)}</strong></div>
+      <div class="kpi"><label>Total Capacity kWp</label><strong>{summary.get('total_capacity_kw', 0)}</strong></div>
+    </section>
+    <h2>Source Summary</h2>
+    {_report_table(report.get('source_rows') or [], source_fields)}
+    <h2>Source Health</h2>
+    {_report_table(report.get('health_rows') or [], health_fields)}
+    <h2 class="page-break">Site Performance</h2>
+    {_report_table((report.get('performance_rows') or [])[:100], performance_fields)}
+    <h2 class="page-break">Exception Report</h2>
+    {_report_table(report.get('exception_rows') or [], exception_fields)}
+  </body>
+</html>"""
+
+
 def sites_to_csv(sites):
     fields = list(COMMON_FIELDS)
     for extra in ("last_sync", "collector_status"):
@@ -295,6 +366,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return self._json(refresh_cache())
         if parsed.path == "/api/reports":
             return self._json(build_report_payload(refresh_cache()))
+        if parsed.path == "/api/report.html":
+            return self._send(200, report_to_html(build_report_payload(refresh_cache())), "text/html; charset=utf-8")
         if parsed.path == "/api/report.csv":
             kind = parse_qs(parsed.query).get("kind", ["summary"])[0]
             try:
