@@ -8,6 +8,8 @@ from solar_dashboard import (
     build_report,
     filter_sites,
     refresh_cache,
+    build_report_payload,
+    report_to_csv,
     sites_to_csv,
     summarize_sites,
 )
@@ -130,6 +132,32 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(report["health_rows"][0]["collector_status"], "ok")
         self.assertEqual(report["health_rows"][1]["source"], "huawei")
         self.assertEqual(report["health_rows"][1]["collector_status"], "degraded")
+
+    def test_build_report_payload_wraps_cache_metadata_and_report(self):
+        cache = {
+            "sites": SITES,
+            "summary": summarize_sites(SITES),
+            "errors": [],
+            "last_refresh_at": "2026-06-08T01:00:00+00:00",
+        }
+
+        payload = build_report_payload(cache)
+
+        self.assertEqual(payload["summary"]["site_count"], 3)
+        self.assertEqual(payload["report"]["source_rows"][0]["source"], "atmoce")
+        self.assertEqual(payload["last_refresh_at"], "2026-06-08T01:00:00+00:00")
+
+    def test_report_to_csv_exports_named_report_sections(self):
+        report = build_report(SITES)
+        text = report_to_csv(report, "performance")
+        rows = list(csv.DictReader(io.StringIO(text)))
+
+        self.assertEqual(rows[0]["site_name"], "PKON")
+        self.assertIn("yield_per_kwp", rows[0])
+
+        health_text = report_to_csv(report, "health")
+        health_rows = list(csv.DictReader(io.StringIO(health_text)))
+        self.assertEqual(health_rows[1]["collector_status"], "degraded")
 
 
 if __name__ == "__main__":

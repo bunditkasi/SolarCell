@@ -8,6 +8,10 @@
     {
       "source": "/api/export.csv",
       "destination": "/api/export"
+    },
+    {
+      "source": "/api/report.csv",
+      "destination": "/api/report"
     }
   ]
 }

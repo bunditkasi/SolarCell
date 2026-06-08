@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from solar_fetch import COMMON_FIELDS, fetch_all
 
@@ -154,6 +154,82 @@ def build_report(sites):
     }
 
 
+REPORT_CSV_FIELDS = {
+    "summary": [
+        "source",
+        "site_count",
+        "capacity_kw",
+        "current_power_kw",
+        "today_energy_kwh",
+        "month_energy_kwh",
+        "lifetime_energy_kwh",
+        "normal_count",
+        "offline_count",
+        "faulty_count",
+        "unknown_count",
+    ],
+    "health": [
+        "source",
+        "collector_status",
+        "normal_count",
+        "offline_count",
+        "faulty_count",
+        "unknown_count",
+    ],
+    "performance": [
+        "source",
+        "status",
+        "site_id",
+        "site_name",
+        "capacity_kw",
+        "current_power_kw",
+        "today_energy_kwh",
+        "yield_per_kwp",
+        "current_load_percent",
+    ],
+    "exceptions": [
+        "source",
+        "status",
+        "site_id",
+        "site_name",
+        "capacity_kw",
+        "current_power_kw",
+        "today_energy_kwh",
+        "last_sync",
+    ],
+}
+
+
+REPORT_ROW_KEYS = {
+    "summary": "source_rows",
+    "health": "health_rows",
+    "performance": "performance_rows",
+    "exceptions": "exception_rows",
+}
+
+
+def build_report_payload(cache):
+    return {
+        "summary": cache.get("summary") or summarize_sites(cache.get("sites") or []),
+        "report": build_report(cache.get("sites") or []),
+        "errors": cache.get("errors") or [],
+        "last_refresh_at": cache.get("last_refresh_at"),
+    }
+
+
+def report_to_csv(report, kind):
+    if kind not in REPORT_ROW_KEYS:
+        raise ValueError(f"Unknown report kind: {kind}")
+    fields = REPORT_CSV_FIELDS[kind]
+    rows = report.get(REPORT_ROW_KEYS[kind]) or []
+    handle = io.StringIO()
+    writer = csv.DictWriter(handle, fieldnames=fields)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({field: row.get(field) for field in fields})
+    return handle.getvalue()
+
+
 def sites_to_csv(sites):
     fields = list(COMMON_FIELDS)
     for extra in ("last_sync", "collector_status"):
@@ -217,6 +293,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/sites":
             return self._json(refresh_cache())
+        if parsed.path == "/api/reports":
+            return self._json(build_report_payload(refresh_cache()))
+        if parsed.path == "/api/report.csv":
+            kind = parse_qs(parsed.query).get("kind", ["summary"])[0]
+            try:
+                body = report_to_csv(build_report(refresh_cache()["sites"]), kind)
+            except ValueError as exc:
+                return self._send(400, str(exc), "text/plain; charset=utf-8")
+            return self._send(200, body, "text/csv; charset=utf-8")
         if parsed.path == "/api/export.csv":
             return self._send(200, sites_to_csv(refresh_cache()["sites"]), "text/csv; charset=utf-8")
         if parsed.path in {"/", "/index.html"}:
