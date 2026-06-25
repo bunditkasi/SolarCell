@@ -5,6 +5,7 @@ const state = {
   lastRefreshAt: null,
   nextRefreshAt: null,
   refreshSchedule: [],
+  backendReport: null,
   view: "dashboard",
 };
 
@@ -32,6 +33,7 @@ const elements = {
   exceptionCount: document.querySelector("#exceptionCount"),
   exportSummary: document.querySelector("#exportSummaryButton"),
   exportPerformance: document.querySelector("#exportPerformanceButton"),
+  loadMonthlyHistory: document.querySelector("#loadMonthlyHistoryButton"),
   exportMonthly: document.querySelector("#exportMonthlyButton"),
   exportExceptions: document.querySelector("#exportExceptionsButton"),
   query: document.querySelector("#queryInput"),
@@ -158,7 +160,7 @@ function buildReport() {
       };
     })
     .sort((a, b) => (b.yield_per_kwp ?? -1) - (a.yield_per_kwp ?? -1));
-  const monthlyRows = state.sites
+  const monthlyRows = state.backendReport?.monthly_rows || state.sites
     .filter((site) => site.month_energy_kwh !== null && site.month_energy_kwh !== undefined && site.month_energy_kwh !== "")
     .map((site) => {
       const capacity = Number(site.capacity_kw) || 0;
@@ -363,6 +365,19 @@ function exportMonthlyReport() {
   downloadCsv("solar-monthly-kwh.csv", rowsToCsv(rows, ["month", "source", "site_id", "site_name", "energy_kwh", "capacity_kw", "yield_per_kwp", "coverage"]));
 }
 
+async function loadMonthlyHistory() {
+  elements.loadMonthlyHistory.disabled = true;
+  elements.loadMonthlyHistory.textContent = "Loading...";
+  const response = await fetch("/api/reports");
+  const data = await response.json();
+  state.backendReport = data.report || null;
+  state.errors = data.errors || [];
+  renderReports();
+  renderErrors(state.errors);
+  elements.loadMonthlyHistory.textContent = "Load History";
+  elements.loadMonthlyHistory.disabled = false;
+}
+
 async function loadData(refresh = false) {
   elements.refresh.disabled = true;
   const response = await fetch(refresh ? "/api/refresh" : "/api/sites", { method: refresh ? "POST" : "GET" });
@@ -390,6 +405,7 @@ for (const input of [elements.query, elements.source, elements.status, elements.
 elements.refresh.addEventListener("click", () => loadData(true));
 elements.exportSummary.addEventListener("click", exportSummaryReport);
 elements.exportPerformance.addEventListener("click", exportPerformanceReport);
+elements.loadMonthlyHistory.addEventListener("click", loadMonthlyHistory);
 elements.exportMonthly.addEventListener("click", exportMonthlyReport);
 elements.exportExceptions.addEventListener("click", exportExceptionReport);
 for (const link of elements.viewLinks) {
