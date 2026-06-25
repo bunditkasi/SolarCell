@@ -2,6 +2,7 @@ import csv
 import html
 import io
 import json
+from calendar import monthrange
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -265,6 +266,104 @@ def build_report_payload(cache, monthly_rows=None):
     }
 
 
+def _month_key(value):
+    text = str(value or "")
+    if len(text) >= 7 and text[4] == "-":
+        return text[:7]
+    return None
+
+
+def _month_range(start_month, end_month):
+    start_year, start_num = (int(part) for part in start_month.split("-"))
+    end_year, end_num = (int(part) for part in end_month.split("-"))
+    months = []
+    year, month = start_year, start_num
+    while (year, month) <= (end_year, end_num):
+        months.append(f"{year:04d}-{month:02d}")
+        month += 1
+        if month == 13:
+            year += 1
+            month = 1
+    return months
+
+
+def build_monthly_kwh_table(sites, monthly_rows, today=None):
+    today = today or _now_utc()
+    current_month = today.strftime("%Y-%m")
+    site_map = {}
+    values_by_site = {}
+
+    for site in sites or []:
+        key = (
+            site.get("source") or "unknown",
+            site.get("site_id") or "",
+            site.get("site_name") or "",
+        )
+        site_map[key] = {
+            "source": key[0],
+            "site_id": key[1],
+            "site_name": key[2],
+            "capacity_kw": site.get("capacity_kw"),
+        }
+
+    historical_months = set()
+    for row in monthly_rows or []:
+        month = _month_key(row.get("month"))
+        if not month:
+            continue
+        key = (
+            row.get("source") or "unknown",
+            row.get("site_id") or "",
+            row.get("site_name") or "",
+        )
+        site_map.setdefault(
+            key,
+            {
+                "source": key[0],
+                "site_id": key[1],
+                "site_name": key[2],
+                "capacity_kw": row.get("capacity_kw"),
+            },
+        )
+        values_by_site.setdefault(key, {})[month] = row.get("energy_kwh")
+        historical_months.add(month)
+
+    start_month = min(historical_months) if historical_months else current_month
+    months = _month_range(start_month, current_month)
+    last_day = monthrange(today.year, today.month)[1]
+    current_status = "On process" if today.day < last_day else "On process"
+
+    rows = []
+    def sort_key(item):
+        has_value = any(month != current_month and values_by_site.get(item, {}).get(month) not in (None, "") for month in months)
+        return (item[0], not has_value, item[2], item[1])
+
+    for key in sorted(site_map, key=sort_key):
+        values = {}
+        for month in months:
+            if month == current_month:
+                values[month] = current_status
+            else:
+                values[month] = values_by_site.get(key, {}).get(month, "N/A")
+        rows.append({**site_map[key], "values": values})
+
+    return {
+        "months": months,
+        "current_month": current_month,
+        "rows": rows,
+    }
+
+
+def build_live_monthly_kwh_payload(cache):
+    monthly_rows = fetch_monthly_energy_rows()
+    return {
+        "summary": cache.get("summary") or summarize_sites(cache.get("sites") or []),
+        "monthly_kwh": build_monthly_kwh_table(cache.get("sites") or [], monthly_rows, today=_now_utc()),
+        "errors": cache.get("errors") or [],
+        "last_refresh_at": cache.get("last_refresh_at"),
+    }
+
+
 def build_live_report_payload(cache):
     monthly_rows = fetch_monthly_energy_rows()
     return build_report_payload(cache, monthly_rows=monthly_rows if monthly_rows else None)
@@ -421,6 +520,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return self._json(refresh_cache())
         if parsed.path == "/api/reports":
             return self._json(build_live_report_payload(refresh_cache()))
+        if parsed.path == "/api/monthly-kwh":
+            return self._json(build_live_monthly_kwh_payload(refresh_cache()))
         if parsed.path == "/api/report.html":
             return self._send(200, report_to_html(build_live_report_payload(refresh_cache())), "text/html; charset=utf-8")
         if parsed.path == "/api/report.csv":

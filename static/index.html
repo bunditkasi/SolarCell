@@ -19,6 +19,7 @@
         <a class="active" data-view-link="dashboard" href="#dashboard">Dashboard</a>
         <a>Sites</a>
         <a data-view-link="reports" href="#reports">Reports</a>
+        <a data-view-link="monthly" href="#monthly">kWh/Monthly</a>
         <a>Alerts</a>
         <a>Settings</a>
       </nav>
@@ -223,6 +224,39 @@
                 </tr>
               </thead>
               <tbody id="exceptionRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section data-view="monthly" hidden>
+        <div class="title-row">
+          <div>
+            <h1>kWh/Monthly</h1>
+            <p>Monthly production by site. Missing data shows N/A; the current month shows On process.</p>
+          </div>
+          <div class="actions">
+            <button id="refreshMonthlyKwhButton" type="button">Refresh Monthly</button>
+            <a class="button secondary" href="/api/report.csv?kind=monthly">Monthly CSV</a>
+          </div>
+        </div>
+
+        <section class="table-shell">
+          <div class="table-header">
+            <h2>kWh/month by Site</h2>
+            <span id="monthlyKwhCount">0 sites</span>
+          </div>
+          <p class="section-note" id="monthlyKwhStatus">Open this page to load monthly kWh data.</p>
+          <div class="table-scroll">
+            <table class="monthly-kwh-table">
+              <thead id="monthlyKwhHead">
+                <tr>
+                  <th>Source</th>
+                  <th>Site Name</th>
+                  <th>Capacity kWp</th>
+                </tr>
+              </thead>
+              <tbody id="monthlyKwhRows"></tbody>
             </table>
           </div>
         </section>

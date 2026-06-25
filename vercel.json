@@ -16,6 +16,10 @@
     {
       "source": "/api/report.html",
       "destination": "/api/report_html"
+    },
+    {
+      "source": "/api/monthly-kwh",
+      "destination": "/api/monthly_kwh"
     }
   ]
 }

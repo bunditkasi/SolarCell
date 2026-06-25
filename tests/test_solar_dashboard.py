@@ -4,6 +4,7 @@ import io
 import unittest
 
 from solar_dashboard import (
+    build_monthly_kwh_table,
     current_cache,
     build_report,
     filter_sites,
@@ -161,6 +162,45 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(payload["report"]["monthly_rows"][0]["month"], "2026-06")
         self.assertEqual(payload["report"]["monthly_rows"][0]["coverage"], "historical")
         self.assertEqual(payload["last_refresh_at"], "2026-06-08T01:00:00+00:00")
+
+    def test_build_monthly_kwh_table_marks_missing_and_current_month(self):
+        table = build_monthly_kwh_table(
+            sites=SITES,
+            monthly_rows=[
+                {
+                    "month": "2026-01",
+                    "source": "atmoce",
+                    "site_id": "A1",
+                    "site_name": "PKON",
+                    "energy_kwh": 1000.25,
+                },
+                {
+                    "month": "2026-02",
+                    "source": "huawei",
+                    "site_id": "H1",
+                    "site_name": "PCKN Mr. DIY",
+                    "energy_kwh": 500,
+                },
+                {
+                    "month": "2026-06",
+                    "source": "atmoce",
+                    "site_id": "A1",
+                    "site_name": "PKON",
+                    "energy_kwh": 900,
+                },
+            ],
+            today=datetime(2026, 6, 25, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(table["months"], ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"])
+        self.assertEqual(table["current_month"], "2026-06")
+        rows_by_name = {row["site_name"]: row for row in table["rows"]}
+        self.assertEqual(rows_by_name["PKON"]["values"]["2026-01"], 1000.25)
+        self.assertEqual(rows_by_name["PKON"]["values"]["2026-02"], "N/A")
+        self.assertEqual(rows_by_name["PKON"]["values"]["2026-06"], "On process")
+        self.assertEqual(rows_by_name["PCKN Mr. DIY"]["values"]["2026-01"], "N/A")
+        self.assertEqual(rows_by_name["PCKN Mr. DIY"]["values"]["2026-02"], 500)
+        self.assertEqual(rows_by_name["Offline Branch"]["values"]["2026-06"], "On process")
 
     def test_report_to_csv_exports_named_report_sections(self):
         report = build_report(SITES)

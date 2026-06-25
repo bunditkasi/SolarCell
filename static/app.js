@@ -6,6 +6,9 @@ const state = {
   nextRefreshAt: null,
   refreshSchedule: [],
   backendReport: null,
+  monthlyKwh: null,
+  monthlyKwhLoaded: false,
+  monthlyKwhLoading: false,
   view: "dashboard",
 };
 
@@ -29,6 +32,11 @@ const elements = {
   performanceCount: document.querySelector("#performanceCount"),
   monthlyRows: document.querySelector("#monthlyRows"),
   monthlyCount: document.querySelector("#monthlyCount"),
+  monthlyKwhHead: document.querySelector("#monthlyKwhHead"),
+  monthlyKwhRows: document.querySelector("#monthlyKwhRows"),
+  monthlyKwhCount: document.querySelector("#monthlyKwhCount"),
+  monthlyKwhStatus: document.querySelector("#monthlyKwhStatus"),
+  refreshMonthlyKwh: document.querySelector("#refreshMonthlyKwhButton"),
   exceptionRows: document.querySelector("#exceptionRows"),
   exceptionCount: document.querySelector("#exceptionCount"),
   exportSummary: document.querySelector("#exportSummaryButton"),
@@ -196,7 +204,7 @@ function buildReport() {
 function renderTable() {
   const rows = filteredSites();
   elements.rowCount.textContent = `${rows.length} sites`;
-  elements.empty.hidden = rows.length > 0;
+  elements.empty.hidden = state.view !== "dashboard" || rows.length > 0;
   elements.rows.innerHTML = rows
     .map((site) => {
       const bucket = statusBucket(site.status);
@@ -297,6 +305,40 @@ function renderReports() {
   }).join("");
 }
 
+function monthlyCell(value) {
+  if (value === "On process") return `<span class="status-chip in-progress">On process</span>`;
+  if (value === "N/A" || value === null || value === undefined || value === "") return `<span class="status-chip muted">N/A</span>`;
+  return number(value);
+}
+
+function renderMonthlyKwh() {
+  const table = state.monthlyKwh || { months: [], current_month: "", rows: [] };
+  const monthHeaders = table.months.map((month) => {
+    const label = month === table.current_month ? `${month} (On process)` : month;
+    return `<th>${escapeHtml(label)}</th>`;
+  }).join("");
+  elements.monthlyKwhHead.innerHTML = `<tr>
+    <th>Source</th>
+    <th>Site Name</th>
+    <th>Capacity kWp</th>
+    ${monthHeaders}
+  </tr>`;
+  elements.monthlyKwhRows.innerHTML = table.rows.map((row) => `<tr>
+    <td><span class="badge">${escapeHtml(row.source || "--")}</span></td>
+    <td>${escapeHtml(row.site_name || "--")}</td>
+    <td>${number(row.capacity_kw)}</td>
+    ${table.months.map((month) => `<td>${monthlyCell(row.values?.[month])}</td>`).join("")}
+  </tr>`).join("");
+  elements.monthlyKwhCount.textContent = `${table.rows.length} sites`;
+  if (state.monthlyKwhLoading) {
+    elements.monthlyKwhStatus.textContent = "Loading monthly kWh data...";
+  } else if (state.monthlyKwhLoaded) {
+    elements.monthlyKwhStatus.textContent = `Loaded ${table.months.length} months. Current month ${table.current_month || "--"} is On process.`;
+  } else {
+    elements.monthlyKwhStatus.textContent = "Open this page to load monthly kWh data.";
+  }
+}
+
 function renderErrors(errors) {
   elements.errors.hidden = !errors.length;
   elements.errors.textContent = errors.join("\n");
@@ -313,6 +355,7 @@ function render() {
   renderErrors(state.errors);
   renderCacheMeta();
   renderReports();
+  renderMonthlyKwh();
   renderView();
 }
 
@@ -326,6 +369,7 @@ function setView(view) {
   window.location.hash = view;
   renderView();
   if (view === "reports") renderReports();
+  if (view === "monthly") loadMonthlyKwh(false);
 }
 
 function rowsToCsv(rows, fields) {
@@ -379,6 +423,28 @@ async function loadMonthlyHistory() {
   elements.loadMonthlyHistory.disabled = false;
 }
 
+async function loadMonthlyKwh(force = false) {
+  if (state.monthlyKwhLoading || (state.monthlyKwhLoaded && !force)) return;
+  state.monthlyKwhLoading = true;
+  elements.refreshMonthlyKwh.disabled = true;
+  renderMonthlyKwh();
+  try {
+    const response = await fetch("/api/monthly-kwh");
+    const data = await response.json();
+    state.monthlyKwh = data.monthly_kwh || { months: [], current_month: "", rows: [] };
+    state.summary = data.summary || state.summary;
+    state.errors = data.errors || [];
+    state.lastRefreshAt = data.last_refresh_at || state.lastRefreshAt;
+    state.monthlyKwhLoaded = true;
+  } finally {
+    state.monthlyKwhLoading = false;
+    elements.refreshMonthlyKwh.disabled = false;
+    renderMonthlyKwh();
+    renderErrors(state.errors);
+    renderCacheMeta();
+  }
+}
+
 async function loadData(refresh = false) {
   elements.refresh.disabled = true;
   const response = await fetch(refresh ? "/api/refresh" : "/api/sites", { method: refresh ? "POST" : "GET" });
@@ -407,6 +473,7 @@ elements.refresh.addEventListener("click", () => loadData(true));
 elements.exportSummary.addEventListener("click", exportSummaryReport);
 elements.exportPerformance.addEventListener("click", exportPerformanceReport);
 elements.loadMonthlyHistory.addEventListener("click", loadMonthlyHistory);
+elements.refreshMonthlyKwh.addEventListener("click", () => loadMonthlyKwh(true));
 elements.exportMonthly.addEventListener("click", exportMonthlyReport);
 elements.exportExceptions.addEventListener("click", exportExceptionReport);
 for (const link of elements.viewLinks) {
@@ -416,5 +483,8 @@ for (const link of elements.viewLinks) {
   });
 }
 
-state.view = window.location.hash === "#reports" ? "reports" : "dashboard";
-loadData(false);
+const initialView = window.location.hash.replace("#", "");
+state.view = ["reports", "monthly"].includes(initialView) ? initialView : "dashboard";
+loadData(false).then(() => {
+  if (state.view === "monthly") loadMonthlyKwh(false);
+});
