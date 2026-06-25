@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from solar_fetch import COMMON_FIELDS, fetch_all
+from solar_fetch import COMMON_FIELDS, fetch_all, fetch_monthly_energy_rows
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -122,6 +122,7 @@ def build_report(sites):
         if _status_bucket(site.get("status")) in {"faulty", "offline", "unknown"}
     ]
     performance_rows = []
+    monthly_rows = []
     for site in sites:
         capacity = _num(site.get("capacity_kw"))
         today_energy = _num(site.get("today_energy_kwh"))
@@ -139,6 +140,20 @@ def build_report(sites):
                 "current_load_percent": round((current_power / capacity) * 100, 2) if capacity else None,
             }
         )
+        month_energy = site.get("month_energy_kwh")
+        if month_energy not in (None, ""):
+            monthly_rows.append(
+                {
+                    "month": site.get("month") or "current",
+                    "source": site.get("source") or "unknown",
+                    "site_id": site.get("site_id") or "",
+                    "site_name": site.get("site_name") or "",
+                    "energy_kwh": month_energy,
+                    "capacity_kw": site.get("capacity_kw"),
+                    "yield_per_kwp": round(_num(month_energy) / capacity, 3) if capacity else None,
+                    "coverage": site.get("monthly_coverage") or "current_month",
+                }
+            )
     performance_rows.sort(
         key=lambda row: (
             row["yield_per_kwp"] is not None,
@@ -152,6 +167,11 @@ def build_report(sites):
         "exception_rows": exception_rows,
         "performance_rows": performance_rows,
         "health_rows": health_rows,
+        "monthly_rows": sorted(
+            monthly_rows,
+            key=lambda row: (str(row.get("month") or ""), str(row.get("source") or ""), str(row.get("site_name") or "")),
+            reverse=True,
+        ),
     }
 
 
@@ -198,6 +218,16 @@ REPORT_CSV_FIELDS = {
         "today_energy_kwh",
         "last_sync",
     ],
+    "monthly": [
+        "month",
+        "source",
+        "site_id",
+        "site_name",
+        "energy_kwh",
+        "capacity_kw",
+        "yield_per_kwp",
+        "coverage",
+    ],
 }
 
 
@@ -206,16 +236,38 @@ REPORT_ROW_KEYS = {
     "health": "health_rows",
     "performance": "performance_rows",
     "exceptions": "exception_rows",
+    "monthly": "monthly_rows",
 }
 
 
-def build_report_payload(cache):
+def build_report_payload(cache, monthly_rows=None):
+    report = build_report(cache.get("sites") or [])
+    if monthly_rows is not None:
+        current_rows = [
+            row
+            for row in report.get("monthly_rows", [])
+            if row.get("source") != "atmoce" or row.get("coverage") != "current_month"
+        ]
+        report["monthly_rows"] = sorted(
+            list(monthly_rows) + current_rows,
+            key=lambda row: (
+                row.get("month") == "current",
+                str(row.get("month") or ""),
+                str(row.get("source") or ""),
+                str(row.get("site_name") or ""),
+            ),
+        )
     return {
         "summary": cache.get("summary") or summarize_sites(cache.get("sites") or []),
-        "report": build_report(cache.get("sites") or []),
+        "report": report,
         "errors": cache.get("errors") or [],
         "last_refresh_at": cache.get("last_refresh_at"),
     }
+
+
+def build_live_report_payload(cache):
+    monthly_rows = fetch_monthly_energy_rows()
+    return build_report_payload(cache, monthly_rows=monthly_rows if monthly_rows else None)
 
 
 def report_to_csv(report, kind):
@@ -257,6 +309,7 @@ def report_to_html(payload):
     source_fields = REPORT_CSV_FIELDS["summary"]
     health_fields = REPORT_CSV_FIELDS["health"]
     performance_fields = REPORT_CSV_FIELDS["performance"]
+    monthly_fields = REPORT_CSV_FIELDS["monthly"]
     exception_fields = REPORT_CSV_FIELDS["exceptions"]
     return f"""<!doctype html>
 <html lang="en">
@@ -295,6 +348,8 @@ def report_to_html(payload):
     {_report_table(report.get('health_rows') or [], health_fields)}
     <h2 class="page-break">Site Performance</h2>
     {_report_table((report.get('performance_rows') or [])[:100], performance_fields)}
+    <h2 class="page-break">Monthly kWh</h2>
+    {_report_table((report.get('monthly_rows') or [])[:200], monthly_fields)}
     <h2 class="page-break">Exception Report</h2>
     {_report_table(report.get('exception_rows') or [], exception_fields)}
   </body>
@@ -365,13 +420,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sites":
             return self._json(refresh_cache())
         if parsed.path == "/api/reports":
-            return self._json(build_report_payload(refresh_cache()))
+            return self._json(build_live_report_payload(refresh_cache()))
         if parsed.path == "/api/report.html":
-            return self._send(200, report_to_html(build_report_payload(refresh_cache())), "text/html; charset=utf-8")
+            return self._send(200, report_to_html(build_live_report_payload(refresh_cache())), "text/html; charset=utf-8")
         if parsed.path == "/api/report.csv":
             kind = parse_qs(parsed.query).get("kind", ["summary"])[0]
             try:
-                body = report_to_csv(build_report(refresh_cache()["sites"]), kind)
+                body = report_to_csv(build_live_report_payload(refresh_cache())["report"], kind)
             except ValueError as exc:
                 return self._send(400, str(exc), "text/plain; charset=utf-8")
             return self._send(200, body, "text/csv; charset=utf-8")

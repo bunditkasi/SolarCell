@@ -142,10 +142,24 @@ class DashboardAggregationTest(unittest.TestCase):
             "last_refresh_at": "2026-06-08T01:00:00+00:00",
         }
 
-        payload = build_report_payload(cache)
+        payload = build_report_payload(
+            cache,
+            monthly_rows=[
+                {
+                    "month": "2026-06",
+                    "source": "atmoce",
+                    "site_id": "A1",
+                    "site_name": "PKON",
+                    "energy_kwh": 1000,
+                    "coverage": "historical",
+                }
+            ],
+        )
 
         self.assertEqual(payload["summary"]["site_count"], 3)
         self.assertEqual(payload["report"]["source_rows"][0]["source"], "atmoce")
+        self.assertEqual(payload["report"]["monthly_rows"][0]["month"], "2026-06")
+        self.assertEqual(payload["report"]["monthly_rows"][0]["coverage"], "historical")
         self.assertEqual(payload["last_refresh_at"], "2026-06-08T01:00:00+00:00")
 
     def test_report_to_csv_exports_named_report_sections(self):
@@ -159,6 +173,12 @@ class DashboardAggregationTest(unittest.TestCase):
         health_text = report_to_csv(report, "health")
         health_rows = list(csv.DictReader(io.StringIO(health_text)))
         self.assertEqual(health_rows[1]["collector_status"], "degraded")
+
+        monthly_text = report_to_csv(report, "monthly")
+        monthly_rows = list(csv.DictReader(io.StringIO(monthly_text)))
+        self.assertEqual(monthly_rows[0]["month"], "current")
+        self.assertEqual(monthly_rows[0]["site_name"], "PCKN Mr. DIY")
+        self.assertEqual(monthly_rows[0]["energy_kwh"], "395.1")
 
     def test_report_to_html_renders_printable_operations_report(self):
         payload = build_report_payload(
@@ -175,6 +195,7 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertIn("<title>Solar Operations Report</title>", html)
         self.assertIn("Solar Operations Report", html)
         self.assertIn("Source Health", html)
+        self.assertIn("Monthly kWh", html)
         self.assertIn("Site Performance", html)
         self.assertIn("Exception Report", html)
         self.assertIn("Offline Branch", html)

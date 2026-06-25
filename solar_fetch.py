@@ -64,6 +64,15 @@ def _ddmmyyyy_to_iso(value):
         return value
 
 
+def _mmyyyy_to_yyyy_mm(value):
+    if not value:
+        return ""
+    try:
+        return datetime.strptime(value, "%m/%Y").strftime("%Y-%m")
+    except ValueError:
+        return value
+
+
 def _json_request(opener, method, url, payload=None, headers=None, timeout=30):
     body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request_headers = {
@@ -92,6 +101,13 @@ def _unwrap_atmoce_data(response):
 def _chunks(values, size):
     for index in range(0, len(values), size):
         yield values[index : index + size]
+
+
+def _add_months(date, delta):
+    month_index = date.year * 12 + (date.month - 1) + delta
+    year = month_index // 12
+    month = month_index % 12 + 1
+    return datetime(year, month, 1)
 
 
 def normalize_atmoce_station(row):
@@ -132,6 +148,21 @@ def normalize_atmoce_openapi_site(site, last_power=None, energy=None):
         "lifetime_energy_kwh": _round_or_none(last_power.get("lifetimeSolarGeneration")),
         "last_sync": _ms_to_utc_iso(last_power.get("lastReportedTime")),
         "collector_status": "ok",
+    }
+
+
+def normalize_atmoce_monthly_energy(site, energy):
+    capacity = _float_or_none(site.get("solarCapacity"))
+    energy_kwh = _float_or_none(energy.get("solarGeneration"))
+    return {
+        "month": _mmyyyy_to_yyyy_mm(energy.get("date")),
+        "source": "atmoce",
+        "site_id": str(site.get("siteId") or energy.get("siteId") or ""),
+        "site_name": site.get("name") or "",
+        "energy_kwh": _round_or_none(energy_kwh),
+        "capacity_kw": _round_or_none(capacity),
+        "yield_per_kwp": round(energy_kwh / capacity, 3) if capacity and energy_kwh is not None else None,
+        "coverage": "historical",
     }
 
 
@@ -332,6 +363,29 @@ class AtmoceOpenApiClient:
             for site in sites
         ]
 
+    def fetch_monthly_energy(self, months=12, today=None):
+        today = today or datetime.now()
+        months = max(1, min(int(months), 12))
+        start = _add_months(datetime(today.year, today.month, 1), -(months - 1))
+        end = datetime(today.year, today.month, 1)
+        sites = self.fetch_sites()
+        site_by_id = {site.get("siteId"): site for site in sites if site.get("siteId")}
+        rows = []
+        for chunk in _chunks(list(site_by_id.keys()), 100):
+            response = self.get(
+                "/openapi/v1/sites/getSitesEnergy",
+                {
+                    "siteIds": ",".join(chunk),
+                    "dateType": "month",
+                    "beginDate": start.strftime("%m/%Y"),
+                    "endDate": end.strftime("%m/%Y"),
+                },
+            )
+            for energy in response.get("data") or []:
+                site = site_by_id.get(energy.get("siteId")) or {"siteId": energy.get("siteId")}
+                rows.append(normalize_atmoce_monthly_energy(site, energy))
+        return sorted(rows, key=lambda row: (row.get("month") or "", row.get("site_name") or ""))
+
 
 class HuaweiClient:
     def __init__(self, base_url, username, system_code, source="huawei"):
@@ -432,6 +486,18 @@ def fetch_huawei01_stations(api_fetcher, snapshot_fetcher):
     rows = [dict(row, collector_status="degraded") for row in rows]
     rows.extend(dict(row, collector_status="degraded") for row in missing)
     return rows
+
+
+def fetch_monthly_energy_rows(environ=None, months=12):
+    environ = environ or os.environ
+    if not (environ.get("ATMOCE_APP_KEY") and environ.get("ATMOCE_APP_SECRET")):
+        return []
+    atmoce = AtmoceOpenApiClient(
+        environ.get("ATMOCE_BASE_URL", "https://www.atmocecloud.com"),
+        environ.get("ATMOCE_APP_KEY"),
+        environ.get("ATMOCE_APP_SECRET"),
+    )
+    return _fetch_source("Atmoce monthly energy", lambda: atmoce.fetch_monthly_energy(months=months))
 
 
 def fetch_all():

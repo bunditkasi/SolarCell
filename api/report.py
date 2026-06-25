@@ -1,14 +1,14 @@
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from solar_dashboard import build_report, refresh_cache, report_to_csv
+from solar_dashboard import build_live_report_payload, refresh_cache, report_to_csv
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         kind = parse_qs(urlparse(self.path).query).get("kind", ["summary"])[0]
         try:
-            body = report_to_csv(build_report(refresh_cache()["sites"]), kind)
+            body = report_to_csv(build_live_report_payload(refresh_cache())["report"], kind)
         except ValueError as exc:
             self.send_response(400)
             self.send_header("Content-Type", "text/plain; charset=utf-8")

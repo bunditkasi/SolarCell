@@ -1,8 +1,9 @@
 import unittest
 from contextlib import redirect_stderr
+from datetime import datetime
 from io import StringIO
 
-from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, fetch_huawei01_stations, load_huawei01_snapshot, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
+from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, fetch_huawei01_stations, load_huawei01_snapshot, normalize_atmoce_monthly_energy, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -69,6 +70,46 @@ class NormalizeSolarDataTest(unittest.TestCase):
         self.assertEqual(normalized["lifetime_energy_kwh"], 19733.02)
         self.assertEqual(normalized["last_sync"], "2026-05-27T02:30:00+00:00")
         self.assertEqual(normalized["collector_status"], "ok")
+
+    def test_normalize_atmoce_monthly_energy_uses_report_schema(self):
+        site = {"siteId": "764260751203", "name": "PRMB", "solarCapacity": 37.18}
+        energy = {"siteId": "764260751203", "date": "06/2026", "solarGeneration": 1234.56}
+
+        normalized = normalize_atmoce_monthly_energy(site, energy)
+
+        self.assertEqual(normalized["month"], "2026-06")
+        self.assertEqual(normalized["source"], "atmoce")
+        self.assertEqual(normalized["site_id"], "764260751203")
+        self.assertEqual(normalized["site_name"], "PRMB")
+        self.assertEqual(normalized["energy_kwh"], 1234.56)
+        self.assertEqual(normalized["capacity_kw"], 37.18)
+        self.assertEqual(normalized["yield_per_kwp"], 33.205)
+        self.assertEqual(normalized["coverage"], "historical")
+
+    def test_atmoce_openapi_monthly_energy_requests_month_range(self):
+        from solar_fetch import AtmoceOpenApiClient
+
+        class FakeAtmoceClient(AtmoceOpenApiClient):
+            def __init__(self):
+                self.requests = []
+
+            def fetch_sites(self):
+                return [{"siteId": "A1", "name": "PKON", "solarCapacity": 42.9}]
+
+            def get(self, path, params=None):
+                self.requests.append((path, params))
+                return {
+                    "data": [
+                        {"siteId": "A1", "date": "05/2026", "solarGeneration": 100.0},
+                        {"siteId": "A1", "date": "06/2026", "solarGeneration": 120.0},
+                    ]
+                }
+
+        rows = FakeAtmoceClient().fetch_monthly_energy(months=2, today=datetime(2026, 6, 25))
+
+        self.assertEqual(rows[0]["month"], "2026-05")
+        self.assertEqual(rows[1]["month"], "2026-06")
+        self.assertEqual(rows[1]["energy_kwh"], 120.0)
 
     def test_normalize_huawei_station_merges_kpi_data(self):
         station = {

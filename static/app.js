@@ -26,10 +26,13 @@ const elements = {
   reportHealthCount: document.querySelector("#reportHealthCount"),
   performanceRows: document.querySelector("#performanceRows"),
   performanceCount: document.querySelector("#performanceCount"),
+  monthlyRows: document.querySelector("#monthlyRows"),
+  monthlyCount: document.querySelector("#monthlyCount"),
   exceptionRows: document.querySelector("#exceptionRows"),
   exceptionCount: document.querySelector("#exceptionCount"),
   exportSummary: document.querySelector("#exportSummaryButton"),
   exportPerformance: document.querySelector("#exportPerformanceButton"),
+  exportMonthly: document.querySelector("#exportMonthlyButton"),
   exportExceptions: document.querySelector("#exportExceptionsButton"),
   query: document.querySelector("#queryInput"),
   source: document.querySelector("#sourceFilter"),
@@ -155,6 +158,23 @@ function buildReport() {
       };
     })
     .sort((a, b) => (b.yield_per_kwp ?? -1) - (a.yield_per_kwp ?? -1));
+  const monthlyRows = state.sites
+    .filter((site) => site.month_energy_kwh !== null && site.month_energy_kwh !== undefined && site.month_energy_kwh !== "")
+    .map((site) => {
+      const capacity = Number(site.capacity_kw) || 0;
+      const energy = Number(site.month_energy_kwh) || 0;
+      return {
+        month: site.month || "current",
+        source: site.source || "unknown",
+        site_id: site.site_id || "",
+        site_name: site.site_name || "",
+        energy_kwh: site.month_energy_kwh,
+        capacity_kw: site.capacity_kw,
+        yield_per_kwp: capacity ? energy / capacity : null,
+        coverage: site.monthly_coverage || "current_month",
+      };
+    })
+    .sort((a, b) => String(b.month).localeCompare(String(a.month)) || String(a.source).localeCompare(String(b.source)));
   return {
     sourceRows,
     healthRows: sourceRows.map((row) => ({
@@ -166,6 +186,7 @@ function buildReport() {
       unknown_count: row.unknown_count,
     })),
     performanceRows,
+    monthlyRows,
     exceptionRows: state.sites.filter((site) => ["faulty", "offline", "unknown"].includes(statusBucket(site.status))),
   };
 }
@@ -245,6 +266,17 @@ function renderReports() {
       <td>${number(site.current_load_percent)}</td>
     </tr>`;
   }).join("");
+
+  elements.monthlyCount.textContent = `${report.monthlyRows.length} rows`;
+  elements.monthlyRows.innerHTML = report.monthlyRows.map((row) => `<tr>
+    <td>${escapeHtml(row.month || "--")}</td>
+    <td><span class="badge">${escapeHtml(row.source || "--")}</span></td>
+    <td>${escapeHtml(row.site_name || "--")}</td>
+    <td>${number(row.energy_kwh)}</td>
+    <td>${number(row.capacity_kw)}</td>
+    <td>${number(row.yield_per_kwp, 3)}</td>
+    <td>${escapeHtml(row.coverage || "--")}</td>
+  </tr>`).join("");
 
   elements.exceptionCount.textContent = `${report.exceptionRows.length} exceptions`;
   elements.exceptionRows.innerHTML = report.exceptionRows.map((site) => {
@@ -326,6 +358,11 @@ function exportPerformanceReport() {
   downloadCsv("solar-site-performance.csv", rowsToCsv(rows, ["source", "status", "site_id", "site_name", "capacity_kw", "current_power_kw", "today_energy_kwh", "yield_per_kwp", "current_load_percent"]));
 }
 
+function exportMonthlyReport() {
+  const rows = buildReport().monthlyRows;
+  downloadCsv("solar-monthly-kwh.csv", rowsToCsv(rows, ["month", "source", "site_id", "site_name", "energy_kwh", "capacity_kw", "yield_per_kwp", "coverage"]));
+}
+
 async function loadData(refresh = false) {
   elements.refresh.disabled = true;
   const response = await fetch(refresh ? "/api/refresh" : "/api/sites", { method: refresh ? "POST" : "GET" });
@@ -353,6 +390,7 @@ for (const input of [elements.query, elements.source, elements.status, elements.
 elements.refresh.addEventListener("click", () => loadData(true));
 elements.exportSummary.addEventListener("click", exportSummaryReport);
 elements.exportPerformance.addEventListener("click", exportPerformanceReport);
+elements.exportMonthly.addEventListener("click", exportMonthlyReport);
 elements.exportExceptions.addEventListener("click", exportExceptionReport);
 for (const link of elements.viewLinks) {
   link.addEventListener("click", (event) => {
