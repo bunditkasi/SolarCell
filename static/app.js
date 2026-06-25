@@ -221,10 +221,11 @@ function renderTable() {
 function renderReports() {
   const report = buildReport();
   const offlineFaulty = report.exceptionRows.length;
+  const summary = state.summary || {};
   elements.reportKpis.innerHTML = [
     ["Report Sites", number(state.sites.length, 0)],
-    ["Today Yield", `${number(state.summary.today_energy_kwh)} kWh`],
-    ["Total Capacity", `${number(state.summary.total_capacity_kw)} kWp`],
+    ["Today Yield", `${number(summary.today_energy_kwh)} kWh`],
+    ["Total Capacity", `${number(summary.total_capacity_kw)} kWp`],
     ["Exceptions", number(offlineFaulty, 0)],
   ].map(([label, value]) => `<article class="card"><label>${label}</label><strong>${value}</strong></article>`).join("");
 
