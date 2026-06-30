@@ -55,6 +55,17 @@ def _ms_to_utc_iso(value):
     return datetime.fromtimestamp(millis / 1000, timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _ms_to_yyyy_mm(value):
+    millis = _float_or_none(value)
+    if millis is None:
+        return ""
+    return datetime.fromtimestamp(millis / 1000, timezone.utc).strftime("%Y-%m")
+
+
+def _datetime_to_ms(value):
+    return int(value.replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+
 def _ddmmyyyy_to_iso(value):
     if not value:
         return ""
@@ -185,6 +196,23 @@ def normalize_huawei_station(station, kpi=None, collector_status="ok", source="h
         "lifetime_energy_kwh": _round_or_none(data.get("total_power")),
         "last_sync": _utc_now_iso(),
         "collector_status": collector_status,
+    }
+
+
+def normalize_huawei_monthly_energy(station, energy, source="huawei"):
+    data = energy.get("dataItemMap") or {}
+    energy_kwh = _float_or_none(data.get("PVYield") or data.get("inverterYield") or data.get("month_power"))
+    capacity = _float_or_none(station.get("capacity"))
+    capacity_kw = capacity * 1000 if capacity is not None else None
+    return {
+        "month": _ms_to_yyyy_mm(energy.get("collectTime")),
+        "source": source,
+        "site_id": station.get("stationCode") or energy.get("stationCode") or "",
+        "site_name": station.get("stationName") or "",
+        "energy_kwh": _round_or_none(energy_kwh),
+        "capacity_kw": _round_or_none(capacity_kw),
+        "yield_per_kwp": round(energy_kwh / capacity_kw, 3) if capacity_kw and energy_kwh is not None else None,
+        "coverage": "historical",
     }
 
 
@@ -449,6 +477,31 @@ class HuaweiClient:
             for station in stations
         ]
 
+    def fetch_monthly_energy(self, months=12, today=None):
+        today = today or datetime.now()
+        months = max(1, min(int(months), 12))
+        start = _add_months(datetime(today.year, today.month, 1), -(months - 1))
+        end = datetime(today.year, today.month, 1)
+        station_response = self.post("/thirdData/getStationList", {})
+        stations = station_response.get("data") or []
+        station_by_code = {station.get("stationCode"): station for station in stations if station.get("stationCode")}
+        years = sorted({month.year for month in (_add_months(start, index) for index in range((end.year - start.year) * 12 + end.month - start.month + 1))})
+        rows = []
+        for chunk in _chunks(list(station_by_code.keys()), 100):
+            station_codes = ",".join(chunk)
+            for year in years:
+                response = self.post(
+                    "/thirdData/getKpiStationMonth",
+                    {"stationCodes": station_codes, "collectTime": _datetime_to_ms(datetime(year, 1, 1))},
+                )
+                for energy in response.get("data") or []:
+                    month = _ms_to_yyyy_mm(energy.get("collectTime"))
+                    if not month or month < start.strftime("%Y-%m") or month > end.strftime("%Y-%m"):
+                        continue
+                    station = station_by_code.get(energy.get("stationCode")) or {"stationCode": energy.get("stationCode")}
+                    rows.append(normalize_huawei_monthly_energy(station, energy, source=self.source))
+        return sorted(rows, key=lambda row: (row.get("month") or "", row.get("site_name") or ""))
+
 
 def build_huawei01_fetcher(environ=None):
     environ = environ or os.environ
@@ -490,14 +543,32 @@ def fetch_huawei01_stations(api_fetcher, snapshot_fetcher):
 
 def fetch_monthly_energy_rows(environ=None, months=12):
     environ = environ or os.environ
-    if not (environ.get("ATMOCE_APP_KEY") and environ.get("ATMOCE_APP_SECRET")):
-        return []
-    atmoce = AtmoceOpenApiClient(
-        environ.get("ATMOCE_BASE_URL", "https://www.atmocecloud.com"),
-        environ.get("ATMOCE_APP_KEY"),
-        environ.get("ATMOCE_APP_SECRET"),
-    )
-    return _fetch_source("Atmoce monthly energy", lambda: atmoce.fetch_monthly_energy(months=months))
+    rows = []
+    if environ.get("ATMOCE_APP_KEY") and environ.get("ATMOCE_APP_SECRET"):
+        atmoce = AtmoceOpenApiClient(
+            environ.get("ATMOCE_BASE_URL", "https://www.atmocecloud.com"),
+            environ.get("ATMOCE_APP_KEY"),
+            environ.get("ATMOCE_APP_SECRET"),
+        )
+        rows.extend(_fetch_source("Atmoce monthly energy", lambda: atmoce.fetch_monthly_energy(months=months)))
+    if environ.get("HUAWEI_USERNAME") and environ.get("HUAWEI_SYSTEM_CODE"):
+        huawei = HuaweiClient(
+            environ.get("HUAWEI_BASE_URL", "https://kr5.fusionsolar.huawei.com"),
+            environ.get("HUAWEI_USERNAME"),
+            environ.get("HUAWEI_SYSTEM_CODE"),
+        )
+        rows.extend(_fetch_source("Huawei monthly energy", lambda: huawei.fetch_monthly_energy(months=months)))
+    if environ.get("HUAWEI01_USERNAME") and (
+        environ.get("HUAWEI01_SYSTEM_CODE") or environ.get("HUAWEI01_PASSWORD")
+    ):
+        huawei01 = HuaweiClient(
+            environ.get("HUAWEI01_BASE_URL") or environ.get("HUAWEI_BASE_URL", "https://kr5.fusionsolar.huawei.com"),
+            environ.get("HUAWEI01_USERNAME"),
+            environ.get("HUAWEI01_SYSTEM_CODE") or environ.get("HUAWEI01_PASSWORD"),
+            source="huawei01",
+        )
+        rows.extend(_fetch_source("Huawei01 monthly energy", lambda: huawei01.fetch_monthly_energy(months=months)))
+    return sorted(rows, key=lambda row: (row.get("month") or "", row.get("source") or "", row.get("site_name") or ""))
 
 
 def fetch_all():

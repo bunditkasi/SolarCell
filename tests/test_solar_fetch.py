@@ -2,8 +2,9 @@ import unittest
 from contextlib import redirect_stderr
 from datetime import datetime
 from io import StringIO
+from unittest.mock import patch
 
-from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, fetch_huawei01_stations, load_huawei01_snapshot, normalize_atmoce_monthly_energy, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_station, normalize_huawei_web_station
+from solar_fetch import HuaweiClient, _fetch_source, build_huawei01_fetcher, fetch_huawei01_stations, fetch_monthly_energy_rows, load_huawei01_snapshot, normalize_atmoce_monthly_energy, normalize_atmoce_openapi_site, normalize_atmoce_station, normalize_huawei_monthly_energy, normalize_huawei_station, normalize_huawei_web_station
 
 
 class NormalizeSolarDataTest(unittest.TestCase):
@@ -139,6 +140,70 @@ class NormalizeSolarDataTest(unittest.TestCase):
         self.assertRegex(normalized["last_sync"], r"^\d{4}-\d{2}-\d{2}T")
         self.assertEqual(normalized["collector_status"], "ok")
 
+    def test_normalize_huawei_monthly_energy_uses_report_schema(self):
+        station = {
+            "stationCode": "NE=55039818",
+            "stationName": "12  PLPR  Mr.DIY Nern payom.",
+            "capacity": 0.03872,
+        }
+        energy = {
+            "stationCode": "NE=55039818",
+            "collectTime": 1780272000000,
+            "dataItemMap": {"PVYield": "1234.567"},
+        }
+
+        normalized = normalize_huawei_monthly_energy(station, energy, source="huawei01")
+
+        self.assertEqual(normalized["month"], "2026-06")
+        self.assertEqual(normalized["source"], "huawei01")
+        self.assertEqual(normalized["site_id"], "NE=55039818")
+        self.assertEqual(normalized["site_name"], "12  PLPR  Mr.DIY Nern payom.")
+        self.assertEqual(normalized["energy_kwh"], 1234.567)
+        self.assertEqual(normalized["capacity_kw"], 38.72)
+        self.assertEqual(normalized["yield_per_kwp"], 31.884)
+        self.assertEqual(normalized["coverage"], "historical")
+
+    def test_huawei_monthly_energy_requests_station_month_api(self):
+        class FakeHuaweiClient(HuaweiClient):
+            def __init__(self):
+                self.source = "huawei"
+                self.requests = []
+
+            def post(self, path, payload):
+                self.requests.append((path, payload))
+                if path == "/thirdData/getStationList":
+                    return {
+                        "data": [
+                            {
+                                "stationCode": "NE=1",
+                                "stationName": "Demo Station",
+                                "capacity": 0.0312,
+                            }
+                        ]
+                    }
+                if path == "/thirdData/getKpiStationMonth":
+                    return {
+                        "data": [
+                            {
+                                "stationCode": "NE=1",
+                                "collectTime": 1777651200000,
+                                "dataItemMap": {"month_power": "456.78"},
+                            }
+                        ]
+                    }
+                raise AssertionError(path)
+
+        client = FakeHuaweiClient()
+        rows = client.fetch_monthly_energy(months=2, today=datetime(2026, 6, 25))
+
+        self.assertEqual(rows[0]["month"], "2026-05")
+        self.assertEqual(rows[0]["site_name"], "Demo Station")
+        self.assertEqual(rows[0]["energy_kwh"], 456.78)
+        self.assertIn(
+            ("/thirdData/getKpiStationMonth", {"stationCodes": "NE=1", "collectTime": 1767225600000}),
+            client.requests,
+        )
+
     def test_huawei_fetch_stations_keeps_station_list_when_realtime_kpi_is_rate_limited(self):
         class FakeHuaweiClient(HuaweiClient):
             def __init__(self):
@@ -268,6 +333,35 @@ class NormalizeSolarDataTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["site_id"], "NE=50806243")
         self.assertEqual(rows[0]["collector_status"], "degraded")
+
+    def test_fetch_monthly_energy_rows_includes_huawei_without_atmoce_credentials(self):
+        class FakeHuaweiMonthlyClient:
+            def __init__(self, base_url, username, system_code, source="huawei"):
+                self.source = source
+
+            def fetch_monthly_energy(self, months=12):
+                return [
+                    {
+                        "month": "2026-06",
+                        "source": self.source,
+                        "site_id": "NE=1",
+                        "site_name": "Demo Station",
+                        "energy_kwh": 456.78,
+                        "coverage": "historical",
+                    }
+                ]
+
+        environ = {
+            "HUAWEI_BASE_URL": "https://example.test",
+            "HUAWEI_USERNAME": "demo",
+            "HUAWEI_SYSTEM_CODE": "system",
+        }
+
+        with patch("solar_fetch.HuaweiClient", FakeHuaweiMonthlyClient):
+            rows = fetch_monthly_energy_rows(environ=environ, months=1)
+
+        self.assertEqual(rows[0]["source"], "huawei")
+        self.assertEqual(rows[0]["energy_kwh"], 456.78)
 
 
 if __name__ == "__main__":
