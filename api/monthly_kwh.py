@@ -1,12 +1,12 @@
 import json
 from http.server import BaseHTTPRequestHandler
 
-from solar_dashboard import build_live_monthly_kwh_payload, refresh_cache
+from solar_dashboard import build_live_monthly_kwh_payload, current_cache
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        payload = build_live_monthly_kwh_payload(refresh_cache())
+        payload = build_live_monthly_kwh_payload(current_cache())
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()

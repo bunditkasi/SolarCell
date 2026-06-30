@@ -485,6 +485,12 @@ for (const link of elements.viewLinks) {
 
 const initialView = window.location.hash.replace("#", "");
 state.view = ["reports", "monthly"].includes(initialView) ? initialView : "dashboard";
-loadData(false).then(() => {
-  if (state.view === "monthly") loadMonthlyKwh(false);
-});
+if (state.view === "monthly") {
+  renderMonthlyKwh();
+  renderErrors(state.errors);
+  renderCacheMeta();
+  renderView();
+  loadMonthlyKwh(false);
+} else {
+  loadData(false);
+}

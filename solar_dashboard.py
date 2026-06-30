@@ -354,11 +354,37 @@ def build_monthly_kwh_table(sites, monthly_rows, today=None):
     }
 
 
-def build_live_monthly_kwh_payload(cache):
-    monthly_rows = fetch_monthly_energy_rows()
+MONTHLY_KWH_CACHE = {}
+
+
+def build_live_monthly_kwh_payload(
+    cache,
+    monthly_fetcher=fetch_monthly_energy_rows,
+    now_provider=None,
+    cache_key="default",
+    max_age_seconds=6 * 60 * 60,
+):
+    now_provider = now_provider or _now_utc
+    now = now_provider()
+    cached = MONTHLY_KWH_CACHE.get(cache_key)
+    if cached:
+        fetched_at = datetime.fromisoformat(cached["fetched_at"])
+        if (now - fetched_at).total_seconds() < max_age_seconds:
+            monthly_rows = cached["monthly_rows"]
+        else:
+            monthly_rows = monthly_fetcher()
+    else:
+        monthly_rows = monthly_fetcher()
+    if monthly_rows:
+        MONTHLY_KWH_CACHE[cache_key] = {
+            "monthly_rows": list(monthly_rows),
+            "fetched_at": now.isoformat(),
+        }
+    elif MONTHLY_KWH_CACHE.get(cache_key):
+        monthly_rows = MONTHLY_KWH_CACHE[cache_key]["monthly_rows"]
     return {
         "summary": cache.get("summary") or summarize_sites(cache.get("sites") or []),
-        "monthly_kwh": build_monthly_kwh_table(cache.get("sites") or [], monthly_rows, today=_now_utc()),
+        "monthly_kwh": build_monthly_kwh_table(cache.get("sites") or [], monthly_rows, today=now_provider()),
         "errors": cache.get("errors") or [],
         "last_refresh_at": cache.get("last_refresh_at"),
     }
@@ -521,7 +547,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/reports":
             return self._json(build_live_report_payload(refresh_cache()))
         if parsed.path == "/api/monthly-kwh":
-            return self._json(build_live_monthly_kwh_payload(refresh_cache()))
+            return self._json(build_live_monthly_kwh_payload(current_cache()))
         if parsed.path == "/api/report.html":
             return self._send(200, report_to_html(build_live_report_payload(refresh_cache())), "text/html; charset=utf-8")
         if parsed.path == "/api/report.csv":

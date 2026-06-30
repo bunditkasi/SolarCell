@@ -5,6 +5,7 @@ import unittest
 
 from solar_dashboard import (
     build_monthly_kwh_table,
+    build_live_monthly_kwh_payload,
     current_cache,
     build_report,
     filter_sites,
@@ -201,6 +202,43 @@ class DashboardAggregationTest(unittest.TestCase):
         self.assertEqual(rows_by_name["PCKN Mr. DIY"]["values"]["2026-01"], "N/A")
         self.assertEqual(rows_by_name["PCKN Mr. DIY"]["values"]["2026-02"], 500)
         self.assertEqual(rows_by_name["Offline Branch"]["values"]["2026-06"], "On process")
+
+    def test_live_monthly_kwh_payload_reuses_cached_rows_when_fetch_is_empty(self):
+        cache = {
+            "sites": [],
+            "summary": summarize_sites([]),
+            "errors": [],
+            "last_refresh_at": "2026-06-30T01:00:00+00:00",
+        }
+        calls = []
+
+        def now_provider():
+            return datetime(2026, 6, 30, tzinfo=timezone.utc)
+
+        def first_fetch():
+            calls.append("first")
+            return [
+                {
+                    "month": "2026-05",
+                    "source": "huawei",
+                    "site_id": "NE=1",
+                    "site_name": "Demo Huawei",
+                    "energy_kwh": 1234.5,
+                    "capacity_kw": 31.2,
+                    "coverage": "historical",
+                }
+            ]
+
+        def second_fetch():
+            calls.append("second")
+            return []
+
+        first = build_live_monthly_kwh_payload(cache, monthly_fetcher=first_fetch, now_provider=now_provider, cache_key="test-cache")
+        second = build_live_monthly_kwh_payload(cache, monthly_fetcher=second_fetch, now_provider=now_provider, cache_key="test-cache")
+
+        self.assertEqual(calls, ["first"])
+        self.assertEqual(first["monthly_kwh"]["rows"][0]["values"]["2026-05"], 1234.5)
+        self.assertEqual(second["monthly_kwh"]["rows"][0]["values"]["2026-05"], 1234.5)
 
     def test_report_to_csv_exports_named_report_sections(self):
         report = build_report(SITES)
